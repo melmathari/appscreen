@@ -327,12 +327,29 @@ function animateThreeJS() {
 
 // Render 3D phone only (with transparent background) to be composited
 function renderThreeJSToCanvas(targetCanvas, width, height) {
-    if (!threeRenderer || !threeScene || !threeCamera) return;
+    if (!threeRenderer || !threeScene || !threeCamera || !phoneModel) return;
 
     const dims = { width: width || 1290, height: height || 2796 };
 
-    // Store original background
+    // Store original values
     const originalBackground = threeScene.background;
+    const originalPosition = phoneModel.position.clone();
+    const originalScale = phoneModel.scale.clone();
+
+    // Apply position from state.screenshot settings
+    if (typeof state !== 'undefined') {
+        // Scale: use screenshot.scale to adjust model size (combined with scale3D)
+        const screenshotScale = state.screenshot.scale / 100;
+        const scale3D = state.scale3D / 100;
+        phoneModel.scale.setScalar(baseModelScale * scale3D * screenshotScale);
+
+        // Position: convert percentage to 3D space offset
+        // X: 0% = left, 50% = center, 100% = right
+        // Y: 0% = top, 50% = center, 100% = bottom
+        const xOffset = ((state.screenshot.x - 50) / 50) * 2; // -2 to 2 range
+        const yOffset = -((state.screenshot.y - 50) / 50) * 3; // -3 to 3 range (inverted for 3D)
+        phoneModel.position.set(xOffset, yOffset, 0);
+    }
 
     // Set transparent background for compositing
     threeScene.background = null;
@@ -350,11 +367,13 @@ function renderThreeJSToCanvas(targetCanvas, width, height) {
     const ctx = targetCanvas.getContext('2d');
     ctx.drawImage(threeRenderer.domElement, 0, 0, dims.width, dims.height);
 
-    // Restore size and background
+    // Restore size, background, and model transforms
     threeRenderer.setSize(oldSize.width, oldSize.height);
     threeCamera.aspect = oldSize.width / oldSize.height;
     threeCamera.updateProjectionMatrix();
     threeScene.background = originalBackground;
+    phoneModel.position.copy(originalPosition);
+    phoneModel.scale.copy(originalScale);
 }
 
 // Show/hide Three.js container

@@ -327,6 +327,7 @@
                     <p class="hint-text">Tip: Drag on the preview to rotate the device interactively.</p>
                 </div>
 
+                <div id="position-presets-section">
                 <div class="divider"></div>
 
                 <div class="control-group">
@@ -382,6 +383,7 @@
                         </button>
                     </div>
                 </div>
+                </div><!-- end position-presets-section -->
 
                 <div class="divider"></div>
 
@@ -409,27 +411,28 @@
                     </div>
                 </div>
 
-                <div class="divider"></div>
+                <div id="2d-only-settings">
+                    <div class="divider"></div>
 
-                <div class="control-group">
-                    <label class="control-label">Corner Radius</label>
-                    <div class="control-row">
-                        <input type="range" id="corner-radius" min="0" max="100" value="24">
-                        <span class="range-value" id="corner-radius-value">24px</span>
+                    <div class="control-group">
+                        <label class="control-label">Corner Radius</label>
+                        <div class="control-row">
+                            <input type="range" id="corner-radius" min="0" max="100" value="24">
+                            <span class="range-value" id="corner-radius-value">24px</span>
+                        </div>
                     </div>
-                </div>
 
-                <div class="control-group">
-                    <label class="control-label">Tilt / Rotation</label>
-                    <div class="control-row">
-                        <input type="range" id="screenshot-rotation" min="-45" max="45" value="0">
-                        <span class="range-value" id="screenshot-rotation-value">0°</span>
+                    <div class="control-group">
+                        <label class="control-label">Tilt / Rotation</label>
+                        <div class="control-row">
+                            <input type="range" id="screenshot-rotation" min="-45" max="45" value="0">
+                            <span class="range-value" id="screenshot-rotation-value">0°</span>
+                        </div>
                     </div>
-                </div>
 
-                <div class="divider"></div>
+                    <div class="divider"></div>
 
-                <h3>Shadow</h3>
+                    <h3>Shadow</h3>
                 <div class="control-group">
                     <div class="toggle-row">
                         <span class="toggle-label">Enable Shadow</span>
@@ -519,6 +522,7 @@
                         </div>
                     </div>
                 </div>
+                </div><!-- end 2d-only-settings -->
             </div>
 
             <!-- Text Tab -->

@@ -625,6 +625,10 @@ function syncUIWithState() {
     document.getElementById('scale-3d').value = state.scale3D;
     document.getElementById('scale-3d-value').textContent = state.scale3D + '%';
 
+    // Hide 2D-only settings in 3D mode
+    document.getElementById('2d-only-settings').style.display = state.use3D ? 'none' : 'block';
+    document.getElementById('position-presets-section').style.display = state.use3D ? 'none' : 'block';
+
     // Show/hide 3D renderer
     if (typeof showThreeJS === 'function') {
         showThreeJS(state.use3D);
@@ -1245,6 +1249,10 @@ function setupEventListeners() {
         this.classList.toggle('active');
         state.use3D = this.classList.contains('active');
         document.getElementById('rotation-3d-options').style.display = state.use3D ? 'block' : 'none';
+
+        // Hide 2D-only settings in 3D mode
+        document.getElementById('2d-only-settings').style.display = state.use3D ? 'none' : 'block';
+        document.getElementById('position-presets-section').style.display = state.use3D ? 'none' : 'block';
 
         if (typeof showThreeJS === 'function') {
             showThreeJS(state.use3D);
