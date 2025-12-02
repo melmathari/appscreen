@@ -3885,12 +3885,15 @@ function drawTextToContext(context, dims, txt) {
         const lines = wrapText(context, headline, dims.width - padding * 2);
         const lineHeight = txt.headlineSize * (txt.lineHeight / 100);
 
+        // For bottom positioning, offset currentY so lines draw correctly
         if (txt.position === 'bottom') {
             currentY -= (lines.length - 1) * lineHeight;
         }
 
+        let lastLineY;
         lines.forEach((line, i) => {
             const y = currentY + i * lineHeight;
+            lastLineY = y;
             context.fillText(line, dims.width / 2, y);
 
             // Calculate text metrics for decorations
@@ -3916,12 +3919,18 @@ function drawTextToContext(context, dims, txt) {
             }
         });
 
-        currentY += lines.length * lineHeight;
+        // Track where subheadline should start (below the bottom edge of headline)
+        if (txt.position === 'top') {
+            // For top: lastLineY is top of last line, add fontSize to get bottom
+            currentY = lastLineY + txt.headlineSize;
+        } else {
+            // For bottom: lastLineY is bottom of last line, that's where text ends
+            currentY = lastLineY;
+        }
     }
 
-    // Draw subheadline
+    // Draw subheadline (always below headline visually)
     if (subheadline) {
-        const subY = txt.position === 'top' ? currentY + 20 : textY + 30;
         const subFontStyle = txt.subheadlineItalic ? 'italic' : 'normal';
         const subWeight = txt.subheadlineWeight || '400';
         context.font = `${subFontStyle} ${subWeight} ${txt.subheadlineSize}px ${txt.subheadlineFont || txt.headlineFont}`;
@@ -3929,6 +3938,13 @@ function drawTextToContext(context, dims, txt) {
 
         const lines = wrapText(context, subheadline, dims.width - padding * 2);
         const lineHeight = txt.subheadlineSize * 1.4;
+
+        // 20px gap from bottom of headline to top of subheadline
+        // For bottom position, switch to 'top' baseline so subheadline draws downward
+        const subY = currentY + 20;
+        if (txt.position === 'bottom') {
+            context.textBaseline = 'top';
+        }
 
         lines.forEach((line, i) => {
             const y = subY + i * lineHeight;
@@ -3940,22 +3956,23 @@ function drawTextToContext(context, dims, txt) {
             const lineThickness = Math.max(2, fontSize * 0.05);
             const x = dims.width / 2 - textWidth / 2;
 
-            // Draw underline
+            // Draw underline (using 'top' baseline for subheadline)
             if (txt.subheadlineUnderline) {
-                const underlineY = txt.position === 'top'
-                    ? y + fontSize * 0.9
-                    : y + fontSize * 0.1;
+                const underlineY = y + fontSize * 0.9;
                 context.fillRect(x, underlineY, textWidth, lineThickness);
             }
 
             // Draw strikethrough
             if (txt.subheadlineStrikethrough) {
-                const strikeY = txt.position === 'top'
-                    ? y + fontSize * 0.4
-                    : y - fontSize * 0.4;
+                const strikeY = y + fontSize * 0.4;
                 context.fillRect(x, strikeY, textWidth, lineThickness);
             }
         });
+
+        // Restore baseline if we changed it
+        if (txt.position === 'bottom') {
+            context.textBaseline = 'bottom';
+        }
     }
 }
 
@@ -4174,8 +4191,10 @@ function drawText() {
             currentY -= (lines.length - 1) * lineHeight;
         }
 
+        let lastLineY;
         lines.forEach((line, i) => {
             const y = currentY + i * lineHeight;
+            lastLineY = y;
             ctx.fillText(line, dims.width / 2, y);
 
             // Calculate text metrics for decorations
@@ -4202,12 +4221,18 @@ function drawText() {
             }
         });
 
-        currentY += lines.length * lineHeight;
+        // Track where subheadline should start (below the bottom edge of headline)
+        if (text.position === 'top') {
+            // For top: lastLineY is top of last line, add fontSize to get bottom
+            currentY = lastLineY + text.headlineSize;
+        } else {
+            // For bottom: lastLineY is bottom of last line, that's where text ends
+            currentY = lastLineY;
+        }
     }
 
-    // Draw subheadline
+    // Draw subheadline (always below headline visually)
     if (subheadline) {
-        const subY = text.position === 'top' ? currentY + 20 : textY + 30;
         const subFontStyle = text.subheadlineItalic ? 'italic' : 'normal';
         const subWeight = text.subheadlineWeight || '400';
         ctx.font = `${subFontStyle} ${subWeight} ${text.subheadlineSize}px ${text.subheadlineFont || text.headlineFont}`;
@@ -4215,6 +4240,13 @@ function drawText() {
 
         const lines = wrapText(ctx, subheadline, dims.width - padding * 2);
         const lineHeight = text.subheadlineSize * 1.4;
+
+        // 20px gap from bottom of headline to top of subheadline
+        // For bottom position, switch to 'top' baseline so subheadline draws downward
+        const subY = currentY + 20;
+        if (text.position === 'bottom') {
+            ctx.textBaseline = 'top';
+        }
 
         lines.forEach((line, i) => {
             const y = subY + i * lineHeight;
@@ -4226,22 +4258,23 @@ function drawText() {
             const lineThickness = Math.max(2, fontSize * 0.05);
             const x = dims.width / 2 - textWidth / 2;
 
-            // Draw underline
+            // Draw underline (using 'top' baseline for subheadline)
             if (text.subheadlineUnderline) {
-                const underlineY = text.position === 'top'
-                    ? y + fontSize * 0.9
-                    : y + fontSize * 0.1;
+                const underlineY = y + fontSize * 0.9;
                 ctx.fillRect(x, underlineY, textWidth, lineThickness);
             }
 
             // Draw strikethrough
             if (text.subheadlineStrikethrough) {
-                const strikeY = text.position === 'top'
-                    ? y + fontSize * 0.4
-                    : y - fontSize * 0.4;
+                const strikeY = y + fontSize * 0.4;
                 ctx.fillRect(x, strikeY, textWidth, lineThickness);
             }
         });
+
+        // Restore baseline if we changed it
+        if (text.position === 'bottom') {
+            ctx.textBaseline = 'bottom';
+        }
     }
 }
 
