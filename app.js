@@ -770,6 +770,47 @@ const canvasWrapper = document.getElementById('canvas-wrapper');
 
 let isSliding = false;
 let skipSidePreviewRender = false;  // Flag to skip re-rendering side previews after pre-render
+
+// Two-finger horizontal swipe to navigate between screenshots
+let swipeAccumulator = 0;
+const SWIPE_THRESHOLD = 50; // Minimum accumulated delta to trigger navigation
+
+// Prevent browser back/forward gesture on the entire canvas area
+canvasWrapper.addEventListener('wheel', (e) => {
+    // Prevent horizontal scroll from triggering browser back/forward
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
+previewStrip.addEventListener('wheel', (e) => {
+    // Only handle horizontal scrolling (two-finger swipe on trackpad)
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (isSliding) return;
+    if (state.screenshots.length <= 1) return;
+
+    swipeAccumulator += e.deltaX;
+
+    if (swipeAccumulator > SWIPE_THRESHOLD) {
+        // Swipe left = go to next screenshot
+        const nextIndex = state.selectedIndex + 1;
+        if (nextIndex < state.screenshots.length) {
+            slideToScreenshot(nextIndex, 'right');
+        }
+        swipeAccumulator = 0;
+    } else if (swipeAccumulator < -SWIPE_THRESHOLD) {
+        // Swipe right = go to previous screenshot
+        const prevIndex = state.selectedIndex - 1;
+        if (prevIndex >= 0) {
+            slideToScreenshot(prevIndex, 'left');
+        }
+        swipeAccumulator = 0;
+    }
+}, { passive: false });
 let suppressSwitchModelUpdate = false;  // Flag to suppress updateCanvas from switchPhoneModel
 const fileInput = document.getElementById('file-input');
 const screenshotList = document.getElementById('screenshot-list');
@@ -2918,11 +2959,14 @@ async function aiTranslateAll() {
 
         const prompt = `You are a professional translator for App Store screenshot marketing copy. Translate the following text from ${languageNames[sourceLang]} to these languages: ${targetLangNames}.
 
-The text is a short marketing headline/tagline for an app, so keep translations:
-- Concise and punchy (similar length to original)
+The text is a short marketing headline/tagline for an app that must fit on a screenshot, so keep translations:
+- SIMILAR LENGTH to the original - do NOT make it longer, as it must fit on screen
+- Concise and punchy
 - Marketing-focused and compelling
 - Culturally appropriate for each target market
 - Natural-sounding in each language
+
+IMPORTANT: The translated text will be displayed on app screenshots with limited space. If the source text is short, the translation MUST also be short. Prioritize brevity over literal accuracy.
 
 Source text (${languageNames[sourceLang]}):
 "${sourceText}"
@@ -3310,10 +3354,12 @@ async function translateAllText() {
 CONTEXT: These are marketing texts for app store screenshots. Each screenshot has a headline and/or subheadline that work together as a pair. The subheadline typically elaborates on or supports the headline. When translating, ensure:
 - Headlines and subheadlines on the same screenshot remain thematically consistent
 - Translations across all screenshots maintain a cohesive marketing voice
-- Each translation is concise and punchy (similar length to originals)
+- SIMILAR LENGTH to the originals - do NOT make translations longer, as they must fit on screen
 - Marketing-focused and compelling language
 - Culturally appropriate for each target market
 - Natural-sounding in each language
+
+IMPORTANT: The translated text will be displayed on app screenshots with limited space. If the source text is short, the translation MUST also be short. Prioritize brevity over literal accuracy.
 
 Source texts (${languageNames[sourceLang]}):
 ${contextualTexts}

@@ -15,6 +15,11 @@
     --accent-hover: #409cff;
 }
 
+html, body {
+    /* Prevent browser back/forward gesture from horizontal swipe */
+    overscroll-behavior-x: none;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
     background: var(--bg-primary);
