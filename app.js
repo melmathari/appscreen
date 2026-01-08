@@ -30,7 +30,7 @@ const state = {
         },
         screenshot: {
             scale: 70,
-            y: 55,
+            y: 60,
             x: 50,
             rotation: 0,
             perspective: 0,
@@ -1281,7 +1281,7 @@ function resetStateToDefaults() {
         },
         screenshot: {
             scale: 70,
-            y: 55,
+            y: 60,
             x: 50,
             rotation: 0,
             perspective: 0,
@@ -2458,6 +2458,12 @@ function setupEventListeners() {
 
             const use3D = btn.dataset.type === '3d';
             setScreenshotSetting('use3D', use3D);
+
+            // Center Y position when switching to 3D mode for better default positioning
+            if (use3D) {
+                setScreenshotSetting('y', 50);
+            }
+
             document.getElementById('rotation-3d-options').style.display = use3D ? 'block' : 'none';
 
             // Hide 2D-only settings in 3D mode, show 3D tip
@@ -3706,8 +3712,8 @@ function applyPositionPreset(preset) {
         'bleed-bottom': { scale: 85, x: 50, y: 120, rotation: 0, perspective: 0 },
         'bleed-top': { scale: 85, x: 50, y: -20, rotation: 0, perspective: 0 },
         'float-center': { scale: 60, x: 50, y: 50, rotation: 0, perspective: 0 },
-        'tilt-left': { scale: 65, x: 50, y: 55, rotation: -8, perspective: 0 },
-        'tilt-right': { scale: 65, x: 50, y: 55, rotation: 8, perspective: 0 },
+        'tilt-left': { scale: 65, x: 50, y: 60, rotation: -8, perspective: 0 },
+        'tilt-right': { scale: 65, x: 50, y: 60, rotation: 8, perspective: 0 },
         'perspective': { scale: 65, x: 50, y: 50, rotation: 0, perspective: 15 },
         'float-bottom': { scale: 55, x: 50, y: 70, rotation: 0, perspective: 0 }
     };
