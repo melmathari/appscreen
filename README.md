@@ -62,11 +62,48 @@ A free, open-source tool for creating beautiful App Store screenshots with custo
 
 ## Getting Started
 
-### Option 1: Use Online
+### Just Want to Use It?
 
-Visit **[yuzu-hub.github.io/appscreen](https://yuzu-hub.github.io/appscreen/)** to use the tool directly in your browser.
+Visit **[yuzu-hub.github.io/appscreen](https://yuzu-hub.github.io/appscreen/)** to use the tool directly in your browser. No installation needed!
 
-### Option 2: Run Locally
+---
+
+### Want to Develop & Customize?
+
+#### Option 1: With Claude Desktop (Easiest - No Technical Knowledge Required)
+
+Perfect for non-technical users who want to run and modify the tool locally with AI assistance:
+
+1. **Install GitHub Desktop**
+   - Download from [desktop.github.com](https://desktop.github.com)
+   - Install and sign in with your GitHub account
+
+2. **Clone this repository**
+   - Click the green "Code" button above → "Open with GitHub Desktop"
+   - Choose where to save it (e.g., Documents folder)
+
+3. **Install Claude Desktop**
+   - Download from [claude.ai/download](https://claude.ai/download)
+   - Sign in with your Anthropic account
+
+4. **Open in Claude Desktop**
+   - Open Claude Desktop app
+   - Click the "Code" tab at the top
+   - Click "Open Folder" and select the cloned repository folder
+
+5. **Start the app**
+   - Simply type: **"start the app"**
+   - Claude will automatically start the server and tell you which URL to open in your browser
+   - Claude monitors the server and reports any issues
+
+6. **Make changes**
+   - Ask Claude to modify features, fix bugs, or add functionality
+   - Claude will show you the proposed commit message before committing
+   - All changes are automatically saved to Git
+
+No command line, no technical setup - just chat with Claude!
+
+#### Option 2: Run Locally (Command Line)
 
 Since this app uses IndexedDB for persistence, you need to serve it through a local web server:
 
@@ -81,11 +118,11 @@ npx serve .
 
 Then open `http://localhost:8000` in your browser.
 
-### Option 3: VS Code Live Server
+#### Option 3: VS Code Live Server
 
 If you have the "Live Server" extension installed in VS Code, right-click `index.html` and select "Open with Live Server".
 
-### Option 4: Docker
+#### Option 4: Docker
 
 Run the pre-built Docker image from GitHub Container Registry:
 
