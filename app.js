@@ -285,10 +285,14 @@ async function fetchAllGoogleFonts() {
         // Try to fetch from Google Fonts API v2
         // API key is optional - the API works without it but has lower rate limits
         const apiKey = state.settings?.googleFontsApiKey || '';
-        const apiUrl = `https://www.googleapis.com/webfonts/v1/webfonts?sort=popularity${apiKey ? '&key=' + apiKey : ''}`;
+        const url = new URL('https://www.googleapis.com/webfonts/v1/webfonts');
+        url.searchParams.set('sort', 'popularity');
+        if (apiKey) {
+            url.searchParams.set('key', apiKey);
+        }
         
         try {
-            const response = await fetch(apiUrl);
+            const response = await fetch(url);
             if (response.ok) {
                 const data = await response.json();
                 if (data.items && data.items.length > 0) {
