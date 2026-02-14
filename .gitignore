@@ -10,9 +10,13 @@
 # Node
 node_modules/
 
-# Electron build output
+# Build output
 dist/
 out/
+
+# Tauri
+src-tauri/target/
+frontend-dist/
 *.dmg
 *.exe
 *.AppImage

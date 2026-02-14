@@ -3922,18 +3922,44 @@ function handleFiles(files) {
     processFilesSequentially(Array.from(files).filter(f => f.type.startsWith('image/')));
 }
 
-// Handle files from Electron menu (receives array of {dataUrl, name})
-function handleFilesFromElectron(filesData) {
-    processElectronFilesSequentially(filesData);
+// Handle files from desktop app (receives array of {dataUrl, name})
+function handleFilesFromDesktop(filesData) {
+    processDesktopFilesSequentially(filesData);
 }
 
-async function processElectronFilesSequentially(filesData) {
+async function processDesktopFilesSequentially(filesData) {
     for (const fileData of filesData) {
-        await processElectronImageFile(fileData);
+        await processDesktopImageFile(fileData);
     }
 }
 
-async function processElectronImageFile(fileData) {
+// Import screenshots via Tauri native file dialog
+async function importScreenshotsFromTauri() {
+    if (!window.__TAURI__) return;
+    try {
+        const selected = await window.__TAURI__.dialog.open({
+            multiple: true,
+            filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }]
+        });
+        if (!selected) return;
+        const paths = Array.isArray(selected) ? selected : [selected];
+        for (const filePath of paths) {
+            const bytes = await window.__TAURI__.fs.readFile(filePath);
+            const blob = new Blob([bytes]);
+            const dataUrl = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+            });
+            const name = filePath.split(/[\\/]/).pop();
+            await handleFilesFromDesktop([{ dataUrl, name }]);
+        }
+    } catch (err) {
+        console.error('Tauri import error:', err);
+    }
+}
+
+async function processDesktopImageFile(fileData) {
     return new Promise((resolve) => {
         const img = new Image();
         img.onload = async () => {
