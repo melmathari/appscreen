@@ -2079,6 +2079,15 @@ function setupEventListeners() {
         saveSettings();
     });
 
+    // Theme selector buttons
+    document.querySelectorAll('#theme-selector button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#theme-selector button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            applyTheme(btn.dataset.theme);
+        });
+    });
+
     // Provider radio buttons
     document.querySelectorAll('input[name="ai-provider"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
@@ -3732,6 +3741,23 @@ function setTranslateStatus(message, type) {
 // Settings modal functions
 // LLM configuration is in llm.js (llmProviders, getSelectedModel, getSelectedProvider)
 
+// Theme management
+function applyTheme(preference) {
+    if (preference === 'light' || preference === 'dark') {
+        document.documentElement.dataset.theme = preference;
+    } else {
+        delete document.documentElement.dataset.theme;
+    }
+}
+
+function initTheme() {
+    const saved = localStorage.getItem('themePreference') || 'auto';
+    applyTheme(saved);
+}
+
+// Apply theme immediately (before async init)
+initTheme();
+
 function openSettingsModal() {
     // Load saved provider
     const savedProvider = getSelectedProvider();
@@ -3773,6 +3799,12 @@ function openSettingsModal() {
         }
     });
 
+    // Load saved theme preference
+    const savedTheme = localStorage.getItem('themePreference') || 'auto';
+    document.querySelectorAll('#theme-selector button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.theme === savedTheme);
+    });
+
     document.getElementById('settings-modal').classList.add('visible');
 }
 
@@ -3783,6 +3815,12 @@ function updateProviderSection(provider) {
 }
 
 function saveSettings() {
+    // Save theme preference
+    const activeThemeBtn = document.querySelector('#theme-selector button.active');
+    const themePreference = activeThemeBtn ? activeThemeBtn.dataset.theme : 'auto';
+    localStorage.setItem('themePreference', themePreference);
+    applyTheme(themePreference);
+
     // Save selected provider
     const selectedProvider = document.querySelector('input[name="ai-provider"]:checked').value;
     localStorage.setItem('aiProvider', selectedProvider);
