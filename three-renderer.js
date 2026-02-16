@@ -962,6 +962,14 @@ function setup3DCanvasInteraction() {
 
     canvas.addEventListener('mousemove', (e) => {
         if (!isDragging3D || typeof state === 'undefined' || !getUse3D()) return;
+        // Don't rotate 3D device while dragging an element
+        const wrapper = document.getElementById('canvas-wrapper');
+        if (wrapper && wrapper.classList.contains('element-dragging')) {
+            isDragging3D = false;
+            isAltDragging = false;
+            canvas.style.cursor = '';
+            return;
+        }
 
         const deltaX = e.clientX - lastMouseX;
         const deltaY = e.clientY - lastMouseY;
