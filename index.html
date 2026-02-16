@@ -978,7 +978,7 @@
                             <circle cx="8.5" cy="8.5" r="1.5"/>
                             <path d="M21 15l-5-5L5 21"/>
                         </svg>
-                        Add Graphic
+                        Graphic
                     </button>
                     <button class="add-element-btn" id="add-text-element-btn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -986,15 +986,63 @@
                             <path d="M9 20h6"/>
                             <path d="M12 4v16"/>
                         </svg>
-                        Add Text
+                        Text
+                    </button>
+                    <button class="add-element-btn" id="add-emoji-btn">
+                        <span style="font-size: 16px; line-height: 1;">😀</span>
+                        Emoji
+                    </button>
+                    <button class="add-element-btn" id="add-icon-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                        Icon
                     </button>
                     <input type="file" id="element-graphic-input" accept="image/*" hidden>
+                </div>
+
+                <!-- Inline Emoji Picker Dropdown -->
+                <div class="inline-picker" id="emoji-picker" style="display: none;">
+                    <div class="inline-picker-search">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <path d="M21 21l-4.35-4.35"/>
+                        </svg>
+                        <input type="text" id="emoji-search" placeholder="Search emoji..." autocomplete="off">
+                    </div>
+                    <div class="inline-picker-categories" id="emoji-categories">
+                        <button class="picker-cat active" data-category="popular">Popular</button>
+                        <button class="picker-cat" data-category="smileys">Smileys</button>
+                        <button class="picker-cat" data-category="objects">Objects</button>
+                        <button class="picker-cat" data-category="symbols">Symbols</button>
+                        <button class="picker-cat" data-category="animals">Animals</button>
+                        <button class="picker-cat" data-category="food">Food</button>
+                        <button class="picker-cat" data-category="travel">Travel</button>
+                        <button class="picker-cat" data-category="flags">Flags</button>
+                    </div>
+                    <div class="inline-picker-grid emoji-grid" id="emoji-grid"></div>
+                </div>
+
+                <!-- Inline Icon Picker Dropdown -->
+                <div class="inline-picker" id="icon-picker" style="display: none;">
+                    <div class="inline-picker-search">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <path d="M21 21l-4.35-4.35"/>
+                        </svg>
+                        <input type="text" id="icon-search" placeholder="Search icons..." autocomplete="off">
+                    </div>
+                    <div class="inline-picker-categories" id="icon-categories">
+                        <button class="picker-cat active" data-category="popular">Popular</button>
+                        <button class="picker-cat" data-category="all">All</button>
+                    </div>
+                    <div class="inline-picker-grid icon-grid" id="icon-grid"></div>
                 </div>
 
                 <div class="elements-list" id="elements-list">
                     <div class="elements-empty" id="elements-empty">
                         <p>No elements yet</p>
-                        <p class="elements-empty-hint">Add graphics or text overlays</p>
+                        <p class="elements-empty-hint">Add graphics, text, emoji, or icons</p>
                     </div>
                 </div>
 
@@ -1048,6 +1096,74 @@
                         <div class="control-row">
                             <input type="range" id="element-opacity" min="0" max="100" value="100">
                             <span class="range-value" id="element-opacity-value">100%</span>
+                        </div>
+                    </div>
+
+                    <!-- Icon element properties -->
+                    <div id="element-icon-properties" style="display: none;">
+                        <div class="divider"></div>
+                        <div class="control-group">
+                            <label class="control-label">Icon Color</label>
+                            <div class="color-input-wrapper">
+                                <input type="color" id="element-icon-color" value="#ffffff">
+                                <input type="text" id="element-icon-color-hex" value="#ffffff">
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Stroke Width</label>
+                            <div class="control-row">
+                                <input type="range" id="element-icon-stroke-width" min="0.5" max="4" step="0.25" value="2">
+                                <span class="range-value" id="element-icon-stroke-width-value">2</span>
+                            </div>
+                        </div>
+                        <div class="divider"></div>
+                        <div class="control-group">
+                            <div class="toggle-row collapsible collapsed" data-target="element-icon-shadow-options">
+                                <span class="toggle-label">
+                                    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="6 9 12 15 18 9"/>
+                                    </svg>
+                                    Shadow
+                                </span>
+                                <div class="toggle" id="element-icon-shadow-toggle"></div>
+                            </div>
+                        </div>
+                        <div id="element-icon-shadow-options" style="display: none;">
+                            <div class="control-group">
+                                <label class="control-label">Shadow Color</label>
+                                <div class="color-input-wrapper">
+                                    <input type="color" id="element-icon-shadow-color" value="#000000">
+                                    <input type="text" id="element-icon-shadow-color-hex" value="#000000">
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Blur</label>
+                                <div class="control-row">
+                                    <input type="range" id="element-icon-shadow-blur" min="0" max="100" value="20">
+                                    <span class="range-value" id="element-icon-shadow-blur-value">20px</span>
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Opacity</label>
+                                <div class="control-row">
+                                    <input type="range" id="element-icon-shadow-opacity" min="0" max="100" value="40">
+                                    <span class="range-value" id="element-icon-shadow-opacity-value">40%</span>
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Offset X</label>
+                                <div class="control-row">
+                                    <input type="range" id="element-icon-shadow-x" min="-50" max="50" value="0">
+                                    <span class="range-value" id="element-icon-shadow-x-value">0px</span>
+                                </div>
+                            </div>
+                            <div class="control-group">
+                                <label class="control-label">Offset Y</label>
+                                <div class="control-row">
+                                    <input type="range" id="element-icon-shadow-y" min="-50" max="50" value="10">
+                                    <span class="range-value" id="element-icon-shadow-y-value">10px</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -1601,6 +1717,7 @@
     <script src="llm.js"></script>
     <script src="language-utils.js"></script>
     <script src="magical-titles.js"></script>
+    <script src="lucide-icons.js"></script>
     <script src="three-renderer.js"></script>
     <script src="app.js"></script>
 </body>

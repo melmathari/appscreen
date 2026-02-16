@@ -202,6 +202,124 @@ function addTextElement() {
     updateElementProperties();
 }
 
+// ===== Lucide SVG loading & caching =====
+const lucideSVGCache = new Map(); // name -> raw SVG text
+
+async function fetchLucideSVG(name) {
+    if (lucideSVGCache.has(name)) return lucideSVGCache.get(name);
+    const url = `https://unpkg.com/lucide-static@latest/icons/${name}.svg`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Failed to fetch icon: ${name}`);
+    const svgText = await resp.text();
+    lucideSVGCache.set(name, svgText);
+    return svgText;
+}
+
+function colorizeLucideSVG(svgText, color, strokeWidth) {
+    return svgText
+        .replace(/stroke="currentColor"/g, `stroke="${color}"`)
+        .replace(/stroke-width="[^"]*"/g, `stroke-width="${strokeWidth}"`);
+}
+
+async function getLucideImage(name, color, strokeWidth) {
+    const rawSVG = await fetchLucideSVG(name);
+    const colorized = colorizeLucideSVG(rawSVG, color, strokeWidth);
+    const blob = new Blob([colorized], { type: 'image/svg+xml' });
+    const blobURL = URL.createObjectURL(blob);
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = blobURL;
+    });
+}
+
+async function updateIconImage(el) {
+    if (el.type !== 'icon') return;
+    try {
+        el.image = await getLucideImage(el.iconName, el.iconColor, el.iconStrokeWidth);
+        updateCanvas();
+    } catch (e) {
+        console.error('Failed to update icon image:', e);
+    }
+}
+
+function addEmojiElement(emoji, name) {
+    const screenshot = getCurrentScreenshot();
+    if (!screenshot) return;
+    if (!screenshot.elements) screenshot.elements = [];
+    const el = {
+        id: crypto.randomUUID(),
+        type: 'emoji',
+        x: 50, y: 50,
+        width: 15,
+        rotation: 0,
+        opacity: 100,
+        layer: 'above-text',
+        emoji: emoji,
+        name: name || 'Emoji',
+        image: null,
+        src: null,
+        text: '',
+        font: "-apple-system, BlinkMacSystemFont, 'SF Pro Display'",
+        fontSize: 60,
+        fontWeight: '600',
+        fontColor: '#ffffff',
+        italic: false,
+        frame: 'none',
+        frameColor: '#ffffff',
+        frameScale: 100
+    };
+    screenshot.elements.push(el);
+    selectedElementId = el.id;
+    updateCanvas();
+    updateElementsList();
+    updateElementProperties();
+}
+
+async function addIconElement(iconName) {
+    const screenshot = getCurrentScreenshot();
+    if (!screenshot) return;
+    if (!screenshot.elements) screenshot.elements = [];
+    const el = {
+        id: crypto.randomUUID(),
+        type: 'icon',
+        x: 50, y: 50,
+        width: 15,
+        rotation: 0,
+        opacity: 100,
+        layer: 'above-text',
+        iconName: iconName,
+        iconColor: '#ffffff',
+        iconStrokeWidth: 2,
+        iconShadow: { enabled: false, color: '#000000', blur: 20, opacity: 40, x: 0, y: 10 },
+        image: null,
+        src: null,
+        name: iconName,
+        text: '',
+        font: "-apple-system, BlinkMacSystemFont, 'SF Pro Display'",
+        fontSize: 60,
+        fontWeight: '600',
+        fontColor: '#ffffff',
+        italic: false,
+        frame: 'none',
+        frameColor: '#ffffff',
+        frameScale: 100
+    };
+    screenshot.elements.push(el);
+    selectedElementId = el.id;
+    updateElementsList();
+    updateElementProperties();
+    // Async: fetch icon SVG
+    try {
+        el.image = await getLucideImage(iconName, el.iconColor, el.iconStrokeWidth);
+        updateCanvas();
+    } catch (e) {
+        console.error('Failed to load icon:', e);
+    }
+    updateCanvas();
+}
+
 function deleteElement(id) {
     const screenshot = getCurrentScreenshot();
     if (!screenshot || !screenshot.elements) return;
@@ -1215,7 +1333,7 @@ function migrate3DPosition(screenshotSettings) {
     screenshotSettings.y = Math.max(0, Math.min(100, 50 + (oldY - 50) * yFactor));
 }
 
-// Reconstruct Image objects for graphic elements from saved src data URLs
+// Reconstruct Image objects for graphic/icon elements from saved data
 function reconstructElementImages(elements) {
     if (!elements || !Array.isArray(elements)) return [];
     return elements.map(el => {
@@ -1224,6 +1342,14 @@ function reconstructElementImages(elements) {
             const img = new Image();
             img.src = el.src;
             restored.image = img;
+        } else if (el.type === 'icon' && el.iconName) {
+            // Async fetch; image will be null initially, then updateCanvas() when ready
+            getLucideImage(el.iconName, el.iconColor || '#ffffff', el.iconStrokeWidth || 2)
+                .then(img => {
+                    restored.image = img;
+                    updateCanvas();
+                })
+                .catch(e => console.error('Failed to reconstruct icon:', e));
         }
         return restored;
     });
@@ -1921,6 +2047,10 @@ function updateElementsList() {
         let thumbContent;
         if (el.type === 'graphic' && el.image) {
             thumbContent = `<img src="${el.image.src}" alt="${el.name}">`;
+        } else if (el.type === 'emoji') {
+            thumbContent = `<span class="emoji-thumb">${el.emoji}</span>`;
+        } else if (el.type === 'icon' && el.image) {
+            thumbContent = `<img src="${el.image.src}" alt="${el.name}" style="padding: 4px; filter: var(--icon-thumb-filter, none);">`;
         } else {
             thumbContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>
@@ -1930,7 +2060,7 @@ function updateElementsList() {
         item.innerHTML = `
             <div class="element-item-thumb">${thumbContent}</div>
             <div class="element-item-info">
-                <div class="element-item-name">${el.type === 'text' ? (el.text || 'Text') : el.name}</div>
+                <div class="element-item-name">${el.type === 'text' ? (el.text || 'Text') : el.type === 'emoji' ? `${el.emoji} ${el.name}` : el.name}</div>
                 <div class="element-item-layer">${layerLabels[el.layer] || el.layer}</div>
             </div>
             <div class="element-item-actions">
@@ -1986,8 +2116,8 @@ function updateElementProperties() {
     }
 
     propsEl.style.display = '';
-    document.getElementById('element-properties-title').textContent =
-        el.type === 'text' ? 'Text Element' : el.name || 'Graphic';
+    const titleMap = { text: 'Text Element', emoji: `${el.emoji} Emoji`, icon: `Icon: ${el.name}`, graphic: el.name || 'Graphic' };
+    document.getElementById('element-properties-title').textContent = titleMap[el.type] || el.name || 'Element';
 
     document.getElementById('element-layer').value = el.layer;
     document.getElementById('element-x').value = el.x;
@@ -2001,8 +2131,14 @@ function updateElementProperties() {
     document.getElementById('element-opacity').value = el.opacity;
     document.getElementById('element-opacity-value').textContent = formatValue(el.opacity) + '%';
 
-    // Text-specific properties
+    // Type-specific properties
     const textProps = document.getElementById('element-text-properties');
+    const iconProps = document.getElementById('element-icon-properties');
+
+    // Hide all type-specific panels first
+    textProps.style.display = 'none';
+    if (iconProps) iconProps.style.display = 'none';
+
     if (el.type === 'text') {
         textProps.style.display = '';
         document.getElementById('element-text-input').value = el.text || '';
@@ -2020,8 +2156,30 @@ function updateElementProperties() {
             document.getElementById('element-frame-scale').value = el.frameScale;
             document.getElementById('element-frame-scale-value').textContent = formatValue(el.frameScale) + '%';
         }
-    } else {
-        textProps.style.display = 'none';
+    } else if (el.type === 'icon' && iconProps) {
+        iconProps.style.display = '';
+        document.getElementById('element-icon-color').value = el.iconColor || '#ffffff';
+        document.getElementById('element-icon-color-hex').value = el.iconColor || '#ffffff';
+        document.getElementById('element-icon-stroke-width').value = el.iconStrokeWidth || 2;
+        document.getElementById('element-icon-stroke-width-value').textContent = el.iconStrokeWidth || 2;
+        // Shadow
+        const shadow = el.iconShadow || { enabled: false, color: '#000000', blur: 20, opacity: 40, x: 0, y: 10 };
+        const shadowToggle = document.getElementById('element-icon-shadow-toggle');
+        const shadowOpts = document.getElementById('element-icon-shadow-options');
+        const shadowRow = shadowToggle?.closest('.toggle-row');
+        if (shadowToggle) shadowToggle.classList.toggle('active', shadow.enabled);
+        if (shadowRow) shadowRow.classList.toggle('collapsed', !shadow.enabled);
+        if (shadowOpts) shadowOpts.style.display = shadow.enabled ? '' : 'none';
+        document.getElementById('element-icon-shadow-color').value = shadow.color;
+        document.getElementById('element-icon-shadow-color-hex').value = shadow.color;
+        document.getElementById('element-icon-shadow-blur').value = shadow.blur;
+        document.getElementById('element-icon-shadow-blur-value').textContent = shadow.blur + 'px';
+        document.getElementById('element-icon-shadow-opacity').value = shadow.opacity;
+        document.getElementById('element-icon-shadow-opacity-value').textContent = shadow.opacity + '%';
+        document.getElementById('element-icon-shadow-x').value = shadow.x;
+        document.getElementById('element-icon-shadow-x-value').textContent = shadow.x + 'px';
+        document.getElementById('element-icon-shadow-y').value = shadow.y;
+        document.getElementById('element-icon-shadow-y-value').textContent = shadow.y + 'px';
     }
 }
 
@@ -2051,6 +2209,116 @@ function setupElementEventListeners() {
     const addTextBtn = document.getElementById('add-text-element-btn');
     if (addTextBtn) {
         addTextBtn.addEventListener('click', () => addTextElement());
+    }
+
+    // Add Emoji button
+    const addEmojiBtn = document.getElementById('add-emoji-btn');
+    if (addEmojiBtn) {
+        addEmojiBtn.addEventListener('click', () => showEmojiPicker());
+    }
+
+    // Add Icon button
+    const addIconBtn = document.getElementById('add-icon-btn');
+    if (addIconBtn) {
+        addIconBtn.addEventListener('click', () => showIconPicker());
+    }
+
+    // Icon color picker
+    const iconColor = document.getElementById('element-icon-color');
+    const iconColorHex = document.getElementById('element-icon-color-hex');
+    if (iconColor) {
+        iconColor.addEventListener('input', () => {
+            const el = getSelectedElement();
+            if (el && el.type === 'icon') {
+                el.iconColor = iconColor.value;
+                if (iconColorHex) iconColorHex.value = iconColor.value;
+                updateIconImage(el);
+            }
+        });
+    }
+    if (iconColorHex) {
+        iconColorHex.addEventListener('change', () => {
+            if (/^#[0-9a-fA-F]{6}$/.test(iconColorHex.value)) {
+                const el = getSelectedElement();
+                if (el && el.type === 'icon') {
+                    el.iconColor = iconColorHex.value;
+                    if (iconColor) iconColor.value = iconColorHex.value;
+                    updateIconImage(el);
+                }
+            }
+        });
+    }
+
+    // Icon stroke width
+    const iconStroke = document.getElementById('element-icon-stroke-width');
+    const iconStrokeVal = document.getElementById('element-icon-stroke-width-value');
+    if (iconStroke) {
+        iconStroke.addEventListener('input', () => {
+            const val = parseFloat(iconStroke.value);
+            if (iconStrokeVal) iconStrokeVal.textContent = val;
+            const el = getSelectedElement();
+            if (el && el.type === 'icon') {
+                el.iconStrokeWidth = val;
+                updateIconImage(el);
+            }
+        });
+    }
+
+    // Icon shadow toggle
+    const iconShadowToggle = document.getElementById('element-icon-shadow-toggle');
+    if (iconShadowToggle) {
+        iconShadowToggle.addEventListener('click', () => {
+            const el = getSelectedElement();
+            if (!el || el.type !== 'icon') return;
+            if (!el.iconShadow) el.iconShadow = { enabled: false, color: '#000000', blur: 20, opacity: 40, x: 0, y: 10 };
+            el.iconShadow.enabled = !el.iconShadow.enabled;
+            updateElementProperties();
+            updateCanvas();
+        });
+    }
+
+    // Icon shadow property helpers
+    const bindIconShadow = (inputId, prop, suffix) => {
+        const input = document.getElementById(inputId);
+        const valEl = document.getElementById(inputId + '-value');
+        if (!input) return;
+        input.addEventListener('input', () => {
+            const el = getSelectedElement();
+            if (!el || el.type !== 'icon' || !el.iconShadow) return;
+            el.iconShadow[prop] = parseFloat(input.value);
+            if (valEl) valEl.textContent = input.value + suffix;
+            updateCanvas();
+        });
+    };
+    bindIconShadow('element-icon-shadow-blur', 'blur', 'px');
+    bindIconShadow('element-icon-shadow-opacity', 'opacity', '%');
+    bindIconShadow('element-icon-shadow-x', 'x', 'px');
+    bindIconShadow('element-icon-shadow-y', 'y', 'px');
+
+    // Icon shadow color
+    const iconShadowColor = document.getElementById('element-icon-shadow-color');
+    const iconShadowColorHex = document.getElementById('element-icon-shadow-color-hex');
+    if (iconShadowColor) {
+        iconShadowColor.addEventListener('input', () => {
+            const el = getSelectedElement();
+            if (el?.type === 'icon' && el.iconShadow) {
+                el.iconShadow.color = iconShadowColor.value;
+                if (iconShadowColorHex) iconShadowColorHex.value = iconShadowColor.value;
+                updateCanvas();
+            }
+        });
+    }
+    if (iconShadowColorHex) {
+        iconShadowColorHex.addEventListener('change', () => {
+            if (/^#[0-9a-fA-F]{6}$/.test(iconShadowColorHex.value)) {
+                const el = getSelectedElement();
+                if (el?.type === 'icon' && el.iconShadow) {
+                    el.iconShadow.color = iconShadowColorHex.value;
+                    if (iconShadowColor) iconShadowColor.value = iconShadowColorHex.value;
+                    updateCanvas();
+                }
+            }
+        });
     }
 
     // Property sliders
@@ -2208,7 +2476,9 @@ function setupElementCanvasDrag() {
                 const elWidth = dims.width * (el.width / 100);
                 let elHeight;
 
-                if (el.type === 'graphic' && el.image) {
+                if (el.type === 'emoji' || el.type === 'icon') {
+                    elHeight = elWidth; // square bounding box
+                } else if (el.type === 'graphic' && el.image) {
                     elHeight = elWidth * (el.image.height / el.image.width);
                 } else {
                     elHeight = el.fontSize * 1.5;
@@ -5205,10 +5475,12 @@ function transferStyle(sourceIndex, targetIndex) {
     target.text.headlines = targetHeadlines;
     target.text.subheadlines = targetSubheadlines;
 
-    // Deep copy elements (reconstruct Image objects for graphics)
+    // Deep copy elements (reconstruct Image objects for graphics and icons)
     target.elements = (source.elements || []).map(el => {
         const copy = JSON.parse(JSON.stringify({ ...el, image: undefined }));
         if (el.type === 'graphic' && el.image) {
+            copy.image = el.image;
+        } else if (el.type === 'icon' && el.image) {
             copy.image = el.image;
         }
         copy.id = crypto.randomUUID();
@@ -6017,7 +6289,35 @@ function drawElementsToContext(context, dims, elements, layer) {
             context.rotate(el.rotation * Math.PI / 180);
         }
 
-        if (el.type === 'graphic' && el.image) {
+        if (el.type === 'emoji' && el.emoji) {
+            const emojiSize = elWidth * 0.85;
+            context.font = `${emojiSize}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(el.emoji, 0, 0);
+        } else if (el.type === 'icon' && el.image) {
+            // Shadow
+            if (el.iconShadow?.enabled) {
+                const s = el.iconShadow;
+                const hex = s.color || '#000000';
+                const r = parseInt(hex.slice(1,3), 16);
+                const g = parseInt(hex.slice(3,5), 16);
+                const b = parseInt(hex.slice(5,7), 16);
+                context.shadowColor = `rgba(${r},${g},${b},${(s.opacity || 0) / 100})`;
+                context.shadowBlur = s.blur || 0;
+                context.shadowOffsetX = s.x || 0;
+                context.shadowOffsetY = s.y || 0;
+            }
+            // Icons are square (1:1)
+            context.drawImage(el.image, -elWidth / 2, -elWidth / 2, elWidth, elWidth);
+            // Reset shadow
+            if (el.iconShadow?.enabled) {
+                context.shadowColor = 'transparent';
+                context.shadowBlur = 0;
+                context.shadowOffsetX = 0;
+                context.shadowOffsetY = 0;
+            }
+        } else if (el.type === 'graphic' && el.image) {
             const aspect = el.image.height / el.image.width;
             const elHeight = elWidth * aspect;
             context.drawImage(el.image, -elWidth / 2, -elHeight / 2, elWidth, elHeight);
@@ -6727,6 +7027,243 @@ async function exportAllLanguages() {
     link.href = URL.createObjectURL(content);
     link.click();
     URL.revokeObjectURL(link.href);
+}
+
+// ===== Emoji Picker (inline dropdown) =====
+
+let emojiPickerInitialized = false;
+
+function showEmojiPicker() {
+    const picker = document.getElementById('emoji-picker');
+    const iconPicker = document.getElementById('icon-picker');
+    if (!picker) return;
+
+    // Close icon picker if open
+    if (iconPicker) iconPicker.style.display = 'none';
+
+    // Toggle
+    if (picker.style.display !== 'none') {
+        picker.style.display = 'none';
+        return;
+    }
+
+    picker.style.display = '';
+    const searchInput = document.getElementById('emoji-search');
+    if (searchInput) {
+        searchInput.value = '';
+        setTimeout(() => searchInput.focus(), 50);
+    }
+
+    // Reset to popular category
+    document.querySelectorAll('#emoji-categories .picker-cat').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.category === 'popular');
+    });
+    renderEmojiGrid('popular');
+
+    if (!emojiPickerInitialized) {
+        emojiPickerInitialized = true;
+
+        // Category tabs
+        document.querySelectorAll('#emoji-categories .picker-cat').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#emoji-categories .picker-cat').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const searchVal = document.getElementById('emoji-search').value.trim();
+                if (searchVal) {
+                    renderEmojiSearchResults(searchVal);
+                } else {
+                    renderEmojiGrid(btn.dataset.category);
+                }
+            });
+        });
+
+        // Search
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                const val = searchInput.value.trim().toLowerCase();
+                if (val) {
+                    renderEmojiSearchResults(val);
+                } else {
+                    const active = document.querySelector('#emoji-categories .picker-cat.active');
+                    renderEmojiGrid(active?.dataset.category || 'popular');
+                }
+            });
+        }
+    }
+}
+
+function renderEmojiGrid(category) {
+    const grid = document.getElementById('emoji-grid');
+    if (!grid || typeof EMOJI_DATA === 'undefined') return;
+    const emojis = EMOJI_DATA[category] || [];
+    grid.innerHTML = emojis.map(e =>
+        `<div class="picker-grid-item emoji-grid-item" data-emoji="${e.emoji}" data-name="${e.name}" title="${e.name}">${e.emoji}</div>`
+    ).join('');
+    wireEmojiClicks(grid);
+}
+
+function renderEmojiSearchResults(query) {
+    const grid = document.getElementById('emoji-grid');
+    if (!grid || typeof EMOJI_DATA === 'undefined') return;
+    const results = [];
+    for (const cat of Object.values(EMOJI_DATA)) {
+        for (const e of cat) {
+            if (e.name.toLowerCase().includes(query) ||
+                e.keywords.some(k => k.includes(query))) {
+                if (!results.find(r => r.emoji === e.emoji)) results.push(e);
+            }
+        }
+    }
+    grid.innerHTML = results.map(e =>
+        `<div class="picker-grid-item emoji-grid-item" data-emoji="${e.emoji}" data-name="${e.name}" title="${e.name}">${e.emoji}</div>`
+    ).join('');
+    wireEmojiClicks(grid);
+}
+
+function wireEmojiClicks(grid) {
+    grid.querySelectorAll('.emoji-grid-item').forEach(item => {
+        item.onclick = () => {
+            addEmojiElement(item.dataset.emoji, item.dataset.name);
+            document.getElementById('emoji-picker').style.display = 'none';
+        };
+    });
+}
+
+// ===== Icon Picker (inline dropdown) =====
+
+let iconPickerInitialized = false;
+let iconSearchTimeout = null;
+
+const iconImageObserver = typeof IntersectionObserver !== 'undefined' ? new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            const item = entry.target;
+            const name = item.dataset.iconName;
+            if (name && !item.dataset.loaded) {
+                item.dataset.loaded = 'true';
+                loadIconPreview(item, name);
+            }
+            iconImageObserver.unobserve(item);
+        }
+    });
+}, { root: document.getElementById('icon-grid'), rootMargin: '50px' }) : null;
+
+async function loadIconPreview(item, name) {
+    try {
+        const svgText = await fetchLucideSVG(name);
+        const colorized = colorizeLucideSVG(svgText, 'currentColor', 2);
+        item.innerHTML = colorized;
+        const svg = item.querySelector('svg');
+        if (svg) {
+            svg.style.width = '20px';
+            svg.style.height = '20px';
+        }
+    } catch (e) {
+        item.innerHTML = `<span style="font-size: 9px; color: var(--text-tertiary);">${name}</span>`;
+    }
+}
+
+function showIconPicker() {
+    const picker = document.getElementById('icon-picker');
+    const emojiPicker = document.getElementById('emoji-picker');
+    if (!picker) return;
+
+    // Close emoji picker if open
+    if (emojiPicker) emojiPicker.style.display = 'none';
+
+    // Toggle
+    if (picker.style.display !== 'none') {
+        picker.style.display = 'none';
+        return;
+    }
+
+    picker.style.display = '';
+    const searchInput = document.getElementById('icon-search');
+    if (searchInput) {
+        searchInput.value = '';
+        setTimeout(() => searchInput.focus(), 50);
+    }
+
+    // Reset to popular category
+    document.querySelectorAll('#icon-categories .picker-cat').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.category === 'popular');
+    });
+    renderIconGrid('popular');
+
+    if (!iconPickerInitialized) {
+        iconPickerInitialized = true;
+
+        // Category tabs
+        document.querySelectorAll('#icon-categories .picker-cat').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#icon-categories .picker-cat').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const searchVal = document.getElementById('icon-search').value.trim();
+                if (searchVal) {
+                    renderIconSearchResults(searchVal);
+                } else {
+                    renderIconGrid(btn.dataset.category);
+                }
+            });
+        });
+
+        // Debounced search
+        if (searchInput) {
+            searchInput.addEventListener('input', () => {
+                clearTimeout(iconSearchTimeout);
+                iconSearchTimeout = setTimeout(() => {
+                    const val = searchInput.value.trim().toLowerCase();
+                    if (val) {
+                        renderIconSearchResults(val);
+                    } else {
+                        const active = document.querySelector('#icon-categories .picker-cat.active');
+                        renderIconGrid(active?.dataset.category || 'popular');
+                    }
+                }, 200);
+            });
+        }
+    }
+}
+
+function renderIconGrid(category) {
+    const grid = document.getElementById('icon-grid');
+    if (!grid) return;
+    const icons = category === 'popular' ? (typeof LUCIDE_POPULAR !== 'undefined' ? LUCIDE_POPULAR : []) :
+                                            (typeof LUCIDE_ALL !== 'undefined' ? LUCIDE_ALL : []);
+    grid.innerHTML = icons.map(name =>
+        `<div class="picker-grid-item icon-grid-item" data-icon-name="${name}" title="${name}"><div class="icon-placeholder"></div></div>`
+    ).join('');
+    wireIconClicks(grid);
+    if (iconImageObserver) {
+        grid.querySelectorAll('.icon-grid-item').forEach(item => {
+            iconImageObserver.observe(item);
+        });
+    }
+}
+
+function renderIconSearchResults(query) {
+    const grid = document.getElementById('icon-grid');
+    if (!grid) return;
+    const allIcons = typeof LUCIDE_ALL !== 'undefined' ? LUCIDE_ALL : [];
+    const results = allIcons.filter(name => name.includes(query));
+    grid.innerHTML = results.map(name =>
+        `<div class="picker-grid-item icon-grid-item" data-icon-name="${name}" title="${name}"><div class="icon-placeholder"></div></div>`
+    ).join('');
+    wireIconClicks(grid);
+    if (iconImageObserver) {
+        grid.querySelectorAll('.icon-grid-item').forEach(item => {
+            iconImageObserver.observe(item);
+        });
+    }
+}
+
+function wireIconClicks(grid) {
+    grid.querySelectorAll('.icon-grid-item').forEach(item => {
+        item.onclick = () => {
+            addIconElement(item.dataset.iconName);
+            document.getElementById('icon-picker').style.display = 'none';
+        };
+    });
 }
 
 // Initialize the app

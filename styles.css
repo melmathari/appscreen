@@ -88,6 +88,7 @@ body {
     background: var(--bg-primary);
     color: var(--text-primary);
     min-height: 100vh;
+    overflow: hidden;
 }
 
 /* Tauri: Make top area draggable for window movement */
@@ -130,6 +131,7 @@ html.tauri-app .right-sidebar {
     display: grid;
     grid-template-columns: 320px 1fr 340px;
     min-height: 100vh;
+    max-height: 100vh;
 }
 
 /* Sidebar styles */
@@ -3052,13 +3054,13 @@ input[type="range"]::-webkit-slider-thumb {
 /* ===== Elements Tab ===== */
 
 .element-add-buttons {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
     margin-bottom: 12px;
 }
 
 .add-element-btn {
-    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3221,4 +3223,133 @@ input[type="range"]::-webkit-slider-thumb {
 
 .canvas-wrapper.element-dragging {
     cursor: grabbing;
+}
+
+/* ===== Inline Emoji & Icon Pickers ===== */
+
+.inline-picker {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+}
+
+.inline-picker-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.inline-picker-search svg {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.inline-picker-search input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+}
+
+.inline-picker-search input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.inline-picker-categories {
+    display: flex;
+    gap: 2px;
+    padding: 6px 6px 0;
+    overflow-x: auto;
+    flex-wrap: wrap;
+}
+
+.picker-cat {
+    padding: 3px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+}
+
+.picker-cat:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.picker-cat.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.inline-picker-grid {
+    overflow-y: auto;
+    max-height: 200px;
+    padding: 6px;
+}
+
+.emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 2px;
+}
+
+.icon-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
+}
+
+.picker-grid-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.12s;
+}
+
+.picker-grid-item:hover {
+    background: var(--accent-subtle);
+    border-color: var(--accent);
+}
+
+.emoji-grid-item {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.icon-grid-item {
+    padding: 6px;
+}
+
+.icon-grid-item img,
+.icon-grid-item svg {
+    width: 20px;
+    height: 20px;
+}
+
+.icon-grid-item .icon-placeholder {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    background: var(--bg-tertiary);
+}
+
+/* Emoji thumbnail in elements list */
+.element-item-thumb .emoji-thumb {
+    font-size: 18px;
+    line-height: 1;
 }
