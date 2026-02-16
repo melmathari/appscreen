@@ -292,6 +292,14 @@ html.tauri-app .right-sidebar {
     background: var(--bg-primary);
 }
 
+.blank-thumb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    border: 1px dashed var(--border-color);
+}
+
 .screenshot-info {
     flex: 1;
     min-width: 0;

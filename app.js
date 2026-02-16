@@ -1149,7 +1149,25 @@ function loadState() {
                             // Check if we have new localized format or old single-image format
                             const hasLocalizedImages = s.localizedImages && Object.keys(s.localizedImages).length > 0;
 
-                            if (hasLocalizedImages) {
+                            if (!hasLocalizedImages && !s.src) {
+                                // Blank screen (no image)
+                                const screenshotSettings = s.screenshot || JSON.parse(JSON.stringify(migratedScreenshot));
+                                if (needs3DMigration) {
+                                    migrate3DPosition(screenshotSettings);
+                                }
+                                state.screenshots[index] = {
+                                    image: null,
+                                    name: s.name || 'Blank Screen',
+                                    deviceType: s.deviceType,
+                                    localizedImages: {},
+                                    background: s.background || JSON.parse(JSON.stringify(migratedBackground)),
+                                    screenshot: screenshotSettings,
+                                    text: s.text || JSON.parse(JSON.stringify(migratedText)),
+                                    overrides: s.overrides || {}
+                                };
+                                loadedCount++;
+                                checkAllLoaded();
+                            } else if (hasLocalizedImages) {
                                 // New format: load all localized images
                                 const langKeys = Object.keys(s.localizedImages);
                                 let langLoadedCount = 0;
@@ -4125,21 +4143,23 @@ async function processImageFile(file) {
 
 function createNewScreenshot(img, src, name, lang, deviceType) {
     const localizedImages = {};
-    localizedImages[lang] = {
-        image: img,
-        src: src,
-        name: name
-    };
+    if (img && src) {
+        localizedImages[lang || 'en'] = {
+            image: img,
+            src: src,
+            name: name
+        };
+    }
 
     // Auto-add language to project if not already present
-    if (!state.projectLanguages.includes(lang)) {
+    if (lang && !state.projectLanguages.includes(lang)) {
         addProjectLanguage(lang);
     }
 
     // Each screenshot gets its own copy of all settings from defaults
     state.screenshots.push({
-        image: img, // Keep for legacy compatibility
-        name: name,
+        image: img || null, // Keep for legacy compatibility
+        name: name || 'Blank Screen',
         deviceType: deviceType,
         localizedImages: localizedImages,
         background: JSON.parse(JSON.stringify(state.defaults.background)),
@@ -4249,6 +4269,7 @@ function updateScreenshotList() {
         // Get localized thumbnail image
         const thumbImg = getScreenshotImage(screenshot);
         const thumbSrc = thumbImg?.src || '';
+        const isBlank = !thumbSrc;
 
         // Build language flags indicator
         const availableLangs = getAvailableLanguagesForScreenshot(screenshot);
@@ -4260,6 +4281,14 @@ function updateScreenshotList() {
             langFlagsHtml = `<span class="screenshot-lang-flags">${flags}${checkmark}</span>`;
         }
 
+        const thumbHtml = isBlank
+            ? `<div class="screenshot-thumb blank-thumb">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                </svg>
+              </div>`
+            : `<img class="screenshot-thumb" src="${thumbSrc}" alt="${screenshot.name}">`;
+
         item.innerHTML = `
             <div class="drag-handle">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -4268,7 +4297,7 @@ function updateScreenshotList() {
                     <circle cx="9" cy="18" r="2"/><circle cx="15" cy="18" r="2"/>
                 </svg>
             </div>
-            <img class="screenshot-thumb" src="${thumbSrc}" alt="${screenshot.name}">
+            ${thumbHtml}
             <div class="screenshot-info">
                 <div class="screenshot-name">${screenshot.name}</div>
                 <div class="screenshot-device">${isTransferTarget ? 'Click source to copy style' : screenshot.deviceType}${langFlagsHtml}</div>
@@ -4498,6 +4527,30 @@ function updateScreenshotList() {
         `;
         uploadItem.addEventListener('click', () => fileInput.click());
         screenshotList.appendChild(uploadItem);
+
+        // Add blank screen button
+        const blankItem = document.createElement('div');
+        blankItem.className = 'screenshot-item upload-item';
+        blankItem.innerHTML = `
+            <div class="upload-item-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                </svg>
+            </div>
+            <div class="screenshot-info">
+                <div class="screenshot-name">Add Blank Screen</div>
+                <div class="screenshot-device">No screenshot image</div>
+            </div>
+        `;
+        blankItem.addEventListener('click', () => {
+            createNewScreenshot(null, null, 'Blank Screen', null, state.outputDevice);
+            state.selectedIndex = state.screenshots.length - 1;
+            updateScreenshotList();
+            syncUIWithState();
+            updateGradientStopsUI();
+            updateCanvas();
+        });
+        screenshotList.appendChild(blankItem);
     }
 
     // Update project selector to reflect current screenshot count
@@ -4947,7 +5000,6 @@ function renderScreenshotToCanvas(index, targetCanvas, targetCtx, dims, previewS
 
     // Get localized image for current language
     const img = getScreenshotImage(screenshot);
-    if (!img) return;
 
     // Set canvas size (this also clears the canvas)
     targetCanvas.width = dims.width;
@@ -4971,12 +5023,14 @@ function renderScreenshotToCanvas(index, targetCanvas, targetCtx, dims, previewS
     const settings = screenshot.screenshot;
     const use3D = settings.use3D || false;
 
-    if (use3D && typeof renderThreeJSForScreenshot === 'function' && phoneModelLoaded) {
-        // Render 3D phone model for this specific screenshot
-        renderThreeJSForScreenshot(targetCanvas, dims.width, dims.height, index);
-    } else {
-        // Draw 2D screenshot using localized image
-        drawScreenshotToContext(targetCtx, dims, img, settings);
+    if (img) {
+        if (use3D && typeof renderThreeJSForScreenshot === 'function' && phoneModelLoaded) {
+            // Render 3D phone model for this specific screenshot
+            renderThreeJSForScreenshot(targetCanvas, dims.width, dims.height, index);
+        } else {
+            // Draw 2D screenshot using localized image
+            drawScreenshotToContext(targetCtx, dims, img, settings);
+        }
     }
 
     // Draw text
