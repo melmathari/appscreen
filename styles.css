@@ -3216,6 +3216,130 @@ input[type="range"]::-webkit-slider-thumb {
     gap: 6px;
 }
 
+/* ===== Popouts Tab ===== */
+.add-popout-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 12px;
+}
+
+.add-popout-btn:hover:not(:disabled) {
+    background: var(--accent-subtle);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.add-popout-btn:disabled {
+    cursor: not-allowed;
+}
+
+.popouts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.popouts-empty {
+    text-align: center;
+    padding: 20px 12px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.popout-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.popout-item:hover {
+    border-color: var(--border-color);
+}
+
+.popout-item.selected {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+}
+
+.popout-item-thumb {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.popout-item-thumb canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.popout-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.popout-item-name {
+    font-size: 12px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.popout-item-crop {
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.popout-item-actions {
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.popout-item:hover .popout-item-actions {
+    opacity: 1;
+}
+
+.popout-properties {
+    margin-top: 4px;
+}
+
+.popout-crop-preview {
+    display: block;
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    cursor: default;
+}
+
 /* Canvas drag cursor for elements */
 .canvas-wrapper.element-hover {
     cursor: grab;

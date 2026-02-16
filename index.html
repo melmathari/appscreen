@@ -346,6 +346,13 @@
                         </svg>
                         <span>Elements</span>
                     </button>
+                    <button class="tab" data-tab="popouts">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="6" width="14" height="12" rx="2"/>
+                            <rect x="10" y="2" width="12" height="10" rx="2"/>
+                        </svg>
+                        <span>Popouts</span>
+                    </button>
                 </div>
             </div>
 
@@ -1233,6 +1240,181 @@
                                     <input type="range" id="element-frame-scale" min="50" max="200" value="100">
                                     <span class="range-value" id="element-frame-scale-value">100%</span>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Popouts Tab -->
+            <div class="tab-content" id="tab-popouts">
+                <button class="add-popout-btn" id="add-popout-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    Add Popout
+                </button>
+
+                <div class="popouts-list" id="popouts-list">
+                    <div class="popouts-empty" id="popouts-empty">
+                        <p>No popouts yet</p>
+                        <p class="elements-empty-hint">Crop and magnify parts of your screenshot</p>
+                    </div>
+                </div>
+
+                <div class="popout-properties" id="popout-properties" style="display: none;">
+                    <div class="divider"></div>
+                    <h3 class="element-properties-title">Source Region</h3>
+
+                    <div class="control-group">
+                        <canvas class="popout-crop-preview" id="popout-crop-preview" width="280" height="280"></canvas>
+                    </div>
+
+                    <div class="control-group">
+                        <label class="control-label">Crop X</label>
+                        <div class="control-row">
+                            <input type="range" id="popout-crop-x" min="0" max="90" value="25" step="1">
+                            <span class="range-value" id="popout-crop-x-value">25%</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Crop Y</label>
+                        <div class="control-row">
+                            <input type="range" id="popout-crop-y" min="0" max="90" value="25" step="1">
+                            <span class="range-value" id="popout-crop-y-value">25%</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Crop Width</label>
+                        <div class="control-row">
+                            <input type="range" id="popout-crop-width" min="5" max="100" value="30" step="1">
+                            <span class="range-value" id="popout-crop-width-value">30%</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Crop Height</label>
+                        <div class="control-row">
+                            <input type="range" id="popout-crop-height" min="5" max="100" value="30" step="1">
+                            <span class="range-value" id="popout-crop-height-value">30%</span>
+                        </div>
+                    </div>
+
+                    <div class="divider"></div>
+                    <h3 class="element-properties-title">Display</h3>
+
+                    <div class="control-group">
+                        <label class="control-label">Position X</label>
+                        <div class="control-row">
+                            <input type="range" id="popout-x" min="0" max="100" value="70">
+                            <span class="range-value" id="popout-x-value">70%</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Position Y</label>
+                        <div class="control-row">
+                            <input type="range" id="popout-y" min="0" max="100" value="30">
+                            <span class="range-value" id="popout-y-value">30%</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Size</label>
+                        <div class="control-row">
+                            <input type="range" id="popout-width" min="5" max="130" value="30">
+                            <span class="range-value" id="popout-width-value">30%</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Rotation</label>
+                        <div class="control-row">
+                            <input type="range" id="popout-rotation" min="-180" max="180" value="0">
+                            <span class="range-value" id="popout-rotation-value">0°</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Opacity</label>
+                        <div class="control-row">
+                            <input type="range" id="popout-opacity" min="0" max="100" value="100">
+                            <span class="range-value" id="popout-opacity-value">100%</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label">Corner Radius</label>
+                        <div class="control-row">
+                            <input type="range" id="popout-corner-radius" min="0" max="50" value="12">
+                            <span class="range-value" id="popout-corner-radius-value">12px</span>
+                        </div>
+                    </div>
+
+                    <!-- Shadow -->
+                    <div class="divider"></div>
+                    <div class="toggle-row collapsible" data-target="popout-shadow-options">
+                        <span class="toggle-label">Shadow</span>
+                        <button class="toggle active" id="popout-shadow-toggle"><span class="toggle-knob"></span></button>
+                    </div>
+                    <div id="popout-shadow-options">
+                        <div class="control-group">
+                            <label class="control-label">Shadow Color</label>
+                            <div class="color-input-wrapper">
+                                <input type="color" id="popout-shadow-color" value="#000000">
+                                <input type="text" id="popout-shadow-color-hex" value="#000000">
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Blur</label>
+                            <div class="control-row">
+                                <input type="range" id="popout-shadow-blur" min="0" max="100" value="30">
+                                <span class="range-value" id="popout-shadow-blur-value">30px</span>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Opacity</label>
+                            <div class="control-row">
+                                <input type="range" id="popout-shadow-opacity" min="0" max="100" value="40">
+                                <span class="range-value" id="popout-shadow-opacity-value">40%</span>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Offset X</label>
+                            <div class="control-row">
+                                <input type="range" id="popout-shadow-x" min="-50" max="50" value="0">
+                                <span class="range-value" id="popout-shadow-x-value">0px</span>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Offset Y</label>
+                            <div class="control-row">
+                                <input type="range" id="popout-shadow-y" min="-50" max="50" value="15">
+                                <span class="range-value" id="popout-shadow-y-value">15px</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Border -->
+                    <div class="divider"></div>
+                    <div class="toggle-row collapsible" data-target="popout-border-options">
+                        <span class="toggle-label">Border</span>
+                        <button class="toggle active" id="popout-border-toggle"><span class="toggle-knob"></span></button>
+                    </div>
+                    <div id="popout-border-options">
+                        <div class="control-group">
+                            <label class="control-label">Border Color</label>
+                            <div class="color-input-wrapper">
+                                <input type="color" id="popout-border-color" value="#ffffff">
+                                <input type="text" id="popout-border-color-hex" value="#ffffff">
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Width</label>
+                            <div class="control-row">
+                                <input type="range" id="popout-border-width" min="0" max="20" value="3">
+                                <span class="range-value" id="popout-border-width-value">3px</span>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Opacity</label>
+                            <div class="control-row">
+                                <input type="range" id="popout-border-opacity" min="0" max="100" value="100">
+                                <span class="range-value" id="popout-border-opacity-value">100%</span>
                             </div>
                         </div>
                     </div>

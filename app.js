@@ -81,12 +81,14 @@ const state = {
             subheadlineColor: '#ffffff',
             subheadlineOpacity: 70
         },
-        elements: []
+        elements: [],
+        popouts: []
     }
 };
 
 // Runtime-only state (not persisted)
 let selectedElementId = null;
+let selectedPopoutId = null;
 let draggingElement = null;
 
 // Preload laurel SVG images for element frames
@@ -136,6 +138,82 @@ function setElementProperty(id, key, value) {
         updateCanvas();
         updateElementsList();
     }
+}
+
+// ===== Popout accessors =====
+function getPopouts() {
+    const screenshot = getCurrentScreenshot();
+    return screenshot ? (screenshot.popouts || []) : [];
+}
+
+function getSelectedPopout() {
+    if (!selectedPopoutId) return null;
+    return getPopouts().find(p => p.id === selectedPopoutId) || null;
+}
+
+function setPopoutProperty(id, key, value) {
+    const popouts = getPopouts();
+    const p = popouts.find(po => po.id === id);
+    if (p) {
+        if (key.includes('.')) {
+            const parts = key.split('.');
+            let obj = p;
+            for (let i = 0; i < parts.length - 1; i++) {
+                obj = obj[parts[i]];
+            }
+            obj[parts[parts.length - 1]] = value;
+        } else {
+            p[key] = value;
+        }
+        updateCanvas();
+        updatePopoutProperties();
+    }
+}
+
+function addPopout() {
+    const screenshot = getCurrentScreenshot();
+    if (!screenshot) return;
+    const img = getScreenshotImage(screenshot);
+    if (!img) return;
+    if (!screenshot.popouts) screenshot.popouts = [];
+    const p = {
+        id: crypto.randomUUID(),
+        cropX: 25, cropY: 25, cropWidth: 30, cropHeight: 30,
+        x: 70, y: 30,
+        width: 30,
+        rotation: 0, opacity: 100, cornerRadius: 12,
+        shadow: { enabled: true, color: '#000000', blur: 30, opacity: 40, x: 0, y: 15 },
+        border: { enabled: true, color: '#ffffff', width: 3, opacity: 100 }
+    };
+    screenshot.popouts.push(p);
+    selectedPopoutId = p.id;
+    updateCanvas();
+    updatePopoutsList();
+    updatePopoutProperties();
+}
+
+function deletePopout(id) {
+    const screenshot = getCurrentScreenshot();
+    if (!screenshot || !screenshot.popouts) return;
+    screenshot.popouts = screenshot.popouts.filter(p => p.id !== id);
+    if (selectedPopoutId === id) selectedPopoutId = null;
+    updateCanvas();
+    updatePopoutsList();
+    updatePopoutProperties();
+}
+
+function movePopout(id, direction) {
+    const screenshot = getCurrentScreenshot();
+    if (!screenshot || !screenshot.popouts) return;
+    const idx = screenshot.popouts.findIndex(p => p.id === id);
+    if (idx === -1) return;
+    if (direction === 'up' && idx < screenshot.popouts.length - 1) {
+        [screenshot.popouts[idx], screenshot.popouts[idx + 1]] = [screenshot.popouts[idx + 1], screenshot.popouts[idx]];
+    } else if (direction === 'down' && idx > 0) {
+        [screenshot.popouts[idx], screenshot.popouts[idx - 1]] = [screenshot.popouts[idx - 1], screenshot.popouts[idx]];
+    }
+    updateCanvas();
+    updatePopoutsList();
 }
 
 function addGraphicElement(img, src, name) {
@@ -1242,6 +1320,7 @@ async function init() {
 function initSync() {
     setupEventListeners();
     setupElementEventListeners();
+    setupPopoutEventListeners();
     initFontPicker();
     updateGradientStopsUI();
     updateCanvas();
@@ -1281,6 +1360,7 @@ function saveState() {
                 ...el,
                 image: undefined // Don't serialize Image objects
             })),
+            popouts: s.popouts || [],
             overrides: s.overrides
         };
     });
@@ -1430,6 +1510,7 @@ function loadState() {
                                     screenshot: screenshotSettings,
                                     text: s.text || JSON.parse(JSON.stringify(migratedText)),
                                     elements: reconstructElementImages(s.elements),
+                                    popouts: s.popouts || [],
                                     overrides: s.overrides || {}
                                 };
                                 loadedCount++;
@@ -1468,6 +1549,7 @@ function loadState() {
                                                     screenshot: screenshotSettings,
                                                     text: s.text || JSON.parse(JSON.stringify(migratedText)),
                                                     elements: reconstructElementImages(s.elements),
+                                                    popouts: s.popouts || [],
                                                     overrides: s.overrides || {}
                                                 };
                                                 loadedCount++;
@@ -1512,6 +1594,7 @@ function loadState() {
                                         screenshot: screenshotSettings,
                                         text: s.text || JSON.parse(JSON.stringify(migratedText)),
                                         elements: reconstructElementImages(s.elements),
+                                        popouts: s.popouts || [],
                                         overrides: s.overrides || {}
                                     };
                                     loadedCount++;
@@ -2012,6 +2095,11 @@ function syncUIWithState() {
     selectedElementId = null;
     updateElementsList();
     updateElementProperties();
+
+    // Popouts
+    selectedPopoutId = null;
+    updatePopoutsList();
+    updatePopoutProperties();
 }
 
 // ===== Elements Tab UI =====
@@ -2463,6 +2551,35 @@ function setupElementCanvasDrag() {
         return snapped;
     }
 
+    function hitTestPopouts(canvasX, canvasY) {
+        const popouts = getPopouts();
+        const dims = getCanvasDimensions();
+        const screenshot = getCurrentScreenshot();
+        if (!screenshot) return null;
+        const img = getScreenshotImage(screenshot);
+        if (!img) return null;
+
+        // Test in reverse order (topmost first)
+        for (let i = popouts.length - 1; i >= 0; i--) {
+            const p = popouts[i];
+            const cx = dims.width * (p.x / 100);
+            const cy = dims.height * (p.y / 100);
+            const displayW = dims.width * (p.width / 100);
+            const sw = (p.cropWidth / 100) * img.width;
+            const sh = (p.cropHeight / 100) * img.height;
+            const cropAspect = sh / sw;
+            const displayH = displayW * cropAspect;
+            const halfW = displayW / 2;
+            const halfH = displayH / 2;
+
+            if (canvasX >= cx - halfW && canvasX <= cx + halfW &&
+                canvasY >= cy - halfH && canvasY <= cy + halfH) {
+                return p;
+            }
+        }
+        return null;
+    }
+
     function hitTestElements(canvasX, canvasY) {
         const elements = getElements();
         const dims = getCanvasDimensions();
@@ -2509,13 +2626,24 @@ function setupElementCanvasDrag() {
         };
         const snapped = snapToGuides(clamped.x, clamped.y);
 
-        const el = getElements().find(e => e.id === draggingElement.id);
-        if (el) {
-            el.x = snapped.x;
-            el.y = snapped.y;
-            updateCanvas();
-            drawSnapGuides();
-            updateElementProperties();
+        if (draggingElement.isPopout) {
+            const p = getPopouts().find(po => po.id === draggingElement.id);
+            if (p) {
+                p.x = snapped.x;
+                p.y = snapped.y;
+                updateCanvas();
+                drawSnapGuides();
+                updatePopoutProperties();
+            }
+        } else {
+            const el = getElements().find(e => e.id === draggingElement.id);
+            if (el) {
+                el.x = snapped.x;
+                el.y = snapped.y;
+                updateCanvas();
+                drawSnapGuides();
+                updateElementProperties();
+            }
         }
     }
 
@@ -2530,6 +2658,37 @@ function setupElementCanvasDrag() {
 
     previewCanvas.addEventListener('mousedown', (e) => {
         const coords = getCanvasCoords(e);
+
+        // Check popouts first (they render on top of elements above-screenshot)
+        const popoutHit = hitTestPopouts(coords.x, coords.y);
+        if (popoutHit) {
+            e.preventDefault();
+            e.stopPropagation();
+            const dims = getCanvasDimensions();
+            draggingElement = {
+                id: popoutHit.id,
+                startX: coords.x,
+                startY: coords.y,
+                origX: popoutHit.x,
+                origY: popoutHit.y,
+                dims: dims,
+                isPopout: true
+            };
+            selectedPopoutId = popoutHit.id;
+            selectedElementId = null;
+            updatePopoutsList();
+            updatePopoutProperties();
+            updateElementsList();
+            updateElementProperties();
+            canvasWrapper.classList.add('element-dragging');
+
+            const popoutsTab = document.querySelector('.tab[data-tab="popouts"]');
+            if (popoutsTab && !popoutsTab.classList.contains('active')) {
+                popoutsTab.click();
+            }
+            return;
+        }
+
         const hit = hitTestElements(coords.x, coords.y);
         if (hit) {
             e.preventDefault();
@@ -2541,14 +2700,17 @@ function setupElementCanvasDrag() {
                 startY: coords.y,
                 origX: hit.x,
                 origY: hit.y,
-                dims: dims
+                dims: dims,
+                isPopout: false
             };
             selectedElementId = hit.id;
+            selectedPopoutId = null;
             updateElementsList();
             updateElementProperties();
+            updatePopoutsList();
+            updatePopoutProperties();
             canvasWrapper.classList.add('element-dragging');
 
-            // Switch to elements tab if not already there
             const elementsTab = document.querySelector('.tab[data-tab="elements"]');
             if (elementsTab && !elementsTab.classList.contains('active')) {
                 elementsTab.click();
@@ -2560,7 +2722,8 @@ function setupElementCanvasDrag() {
         if (!draggingElement) {
             // Hover detection
             const coords = getCanvasCoords(e);
-            const hit = hitTestElements(coords.x, coords.y);
+            const popoutHit = hitTestPopouts(coords.x, coords.y);
+            const hit = popoutHit || hitTestElements(coords.x, coords.y);
             canvasWrapper.classList.toggle('element-hover', !!hit);
             return;
         }
@@ -2573,6 +2736,27 @@ function setupElementCanvasDrag() {
     // Touch support
     previewCanvas.addEventListener('touchstart', (e) => {
         const coords = getCanvasCoords(e);
+
+        const popoutHit = hitTestPopouts(coords.x, coords.y);
+        if (popoutHit) {
+            e.preventDefault();
+            const dims = getCanvasDimensions();
+            draggingElement = {
+                id: popoutHit.id,
+                startX: coords.x,
+                startY: coords.y,
+                origX: popoutHit.x,
+                origY: popoutHit.y,
+                dims: dims,
+                isPopout: true
+            };
+            selectedPopoutId = popoutHit.id;
+            selectedElementId = null;
+            updatePopoutsList();
+            updatePopoutProperties();
+            return;
+        }
+
         const hit = hitTestElements(coords.x, coords.y);
         if (hit) {
             e.preventDefault();
@@ -2583,7 +2767,8 @@ function setupElementCanvasDrag() {
                 startY: coords.y,
                 origX: hit.x,
                 origY: hit.y,
-                dims: dims
+                dims: dims,
+                isPopout: false
             };
             selectedElementId = hit.id;
             updateElementsList();
@@ -2635,6 +2820,548 @@ function drawSnapGuides() {
     }
 
     ctx.restore();
+}
+
+// ===== Popouts Tab UI =====
+
+function updatePopoutsList() {
+    const listEl = document.getElementById('popouts-list');
+    const emptyEl = document.getElementById('popouts-empty');
+    const addBtn = document.getElementById('add-popout-btn');
+    if (!listEl) return;
+
+    const popouts = getPopouts();
+    const screenshot = getCurrentScreenshot();
+    const hasImage = screenshot && getScreenshotImage(screenshot);
+
+    // Disable add button when no screenshot image
+    if (addBtn) {
+        addBtn.disabled = !hasImage;
+        addBtn.style.opacity = hasImage ? '' : '0.4';
+    }
+
+    // Remove old items
+    listEl.querySelectorAll('.popout-item').forEach(el => el.remove());
+
+    if (popouts.length === 0) {
+        if (emptyEl) emptyEl.style.display = '';
+        return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    popouts.forEach((p, idx) => {
+        const item = document.createElement('div');
+        item.className = 'popout-item' + (p.id === selectedPopoutId ? ' selected' : '');
+        item.dataset.popoutId = p.id;
+
+        // Generate crop preview thumbnail
+        const thumbCanvas = document.createElement('canvas');
+        thumbCanvas.width = 28;
+        thumbCanvas.height = 28;
+        const thumbCtx = thumbCanvas.getContext('2d');
+        const img = hasImage ? getScreenshotImage(screenshot) : null;
+        if (img) {
+            const sx = (p.cropX / 100) * img.width;
+            const sy = (p.cropY / 100) * img.height;
+            const sw = (p.cropWidth / 100) * img.width;
+            const sh = (p.cropHeight / 100) * img.height;
+            thumbCtx.drawImage(img, sx, sy, sw, sh, 0, 0, 28, 28);
+        }
+
+        item.innerHTML = `
+            <div class="popout-item-thumb"></div>
+            <div class="popout-item-info">
+                <div class="popout-item-name">Popout ${idx + 1}</div>
+                <div class="popout-item-crop">${Math.round(p.cropWidth)}% × ${Math.round(p.cropHeight)}%</div>
+            </div>
+            <div class="popout-item-actions">
+                <button class="element-item-btn" data-action="move-up" title="Move up">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="18 15 12 9 6 15"/>
+                    </svg>
+                </button>
+                <button class="element-item-btn" data-action="move-down" title="Move down">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </button>
+                <button class="element-item-btn danger" data-action="delete" title="Delete">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        `;
+
+        // Insert thumbnail canvas
+        const thumbHolder = item.querySelector('.popout-item-thumb');
+        if (thumbHolder) thumbHolder.appendChild(thumbCanvas);
+
+        item.addEventListener('click', (e) => {
+            if (e.target.closest('.element-item-btn')) return;
+            selectedPopoutId = p.id;
+            updatePopoutsList();
+            updatePopoutProperties();
+        });
+
+        item.querySelectorAll('.element-item-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const action = btn.dataset.action;
+                if (action === 'delete') deletePopout(p.id);
+                else if (action === 'move-up') movePopout(p.id, 'up');
+                else if (action === 'move-down') movePopout(p.id, 'down');
+            });
+        });
+
+        listEl.appendChild(item);
+    });
+}
+
+function updatePopoutProperties() {
+    const propsEl = document.getElementById('popout-properties');
+    if (!propsEl) return;
+
+    const p = getSelectedPopout();
+    if (!p) {
+        propsEl.style.display = 'none';
+        return;
+    }
+    propsEl.style.display = '';
+
+    // Crop region
+    document.getElementById('popout-crop-x').value = p.cropX;
+    document.getElementById('popout-crop-x-value').textContent = formatValue(p.cropX) + '%';
+    document.getElementById('popout-crop-y').value = p.cropY;
+    document.getElementById('popout-crop-y-value').textContent = formatValue(p.cropY) + '%';
+    document.getElementById('popout-crop-width').value = p.cropWidth;
+    document.getElementById('popout-crop-width-value').textContent = formatValue(p.cropWidth) + '%';
+    document.getElementById('popout-crop-height').value = p.cropHeight;
+    document.getElementById('popout-crop-height-value').textContent = formatValue(p.cropHeight) + '%';
+
+    // Display
+    document.getElementById('popout-x').value = p.x;
+    document.getElementById('popout-x-value').textContent = formatValue(p.x) + '%';
+    document.getElementById('popout-y').value = p.y;
+    document.getElementById('popout-y-value').textContent = formatValue(p.y) + '%';
+    document.getElementById('popout-width').value = p.width;
+    document.getElementById('popout-width-value').textContent = formatValue(p.width) + '%';
+    document.getElementById('popout-rotation').value = p.rotation;
+    document.getElementById('popout-rotation-value').textContent = formatValue(p.rotation) + '°';
+    document.getElementById('popout-opacity').value = p.opacity;
+    document.getElementById('popout-opacity-value').textContent = formatValue(p.opacity) + '%';
+    document.getElementById('popout-corner-radius').value = p.cornerRadius;
+    document.getElementById('popout-corner-radius-value').textContent = formatValue(p.cornerRadius) + 'px';
+
+    // Shadow
+    const shadow = p.shadow || { enabled: false, color: '#000000', blur: 30, opacity: 40, x: 0, y: 15 };
+    document.getElementById('popout-shadow-toggle').classList.toggle('active', shadow.enabled);
+    const shadowRow = document.getElementById('popout-shadow-toggle')?.closest('.toggle-row');
+    if (shadowRow) shadowRow.classList.toggle('collapsed', !shadow.enabled);
+    document.getElementById('popout-shadow-options').style.display = shadow.enabled ? '' : 'none';
+    document.getElementById('popout-shadow-color').value = shadow.color;
+    document.getElementById('popout-shadow-color-hex').value = shadow.color;
+    document.getElementById('popout-shadow-blur').value = shadow.blur;
+    document.getElementById('popout-shadow-blur-value').textContent = formatValue(shadow.blur) + 'px';
+    document.getElementById('popout-shadow-opacity').value = shadow.opacity;
+    document.getElementById('popout-shadow-opacity-value').textContent = formatValue(shadow.opacity) + '%';
+    document.getElementById('popout-shadow-x').value = shadow.x;
+    document.getElementById('popout-shadow-x-value').textContent = formatValue(shadow.x) + 'px';
+    document.getElementById('popout-shadow-y').value = shadow.y;
+    document.getElementById('popout-shadow-y-value').textContent = formatValue(shadow.y) + 'px';
+
+    // Border
+    const border = p.border || { enabled: false, color: '#ffffff', width: 3, opacity: 100 };
+    document.getElementById('popout-border-toggle').classList.toggle('active', border.enabled);
+    const borderRow = document.getElementById('popout-border-toggle')?.closest('.toggle-row');
+    if (borderRow) borderRow.classList.toggle('collapsed', !border.enabled);
+    document.getElementById('popout-border-options').style.display = border.enabled ? '' : 'none';
+    document.getElementById('popout-border-color').value = border.color;
+    document.getElementById('popout-border-color-hex').value = border.color;
+    document.getElementById('popout-border-width').value = border.width;
+    document.getElementById('popout-border-width-value').textContent = formatValue(border.width) + 'px';
+    document.getElementById('popout-border-opacity').value = border.opacity;
+    document.getElementById('popout-border-opacity-value').textContent = formatValue(border.opacity) + '%';
+
+    // Update crop preview
+    updateCropPreview();
+}
+
+// Compute image-fit layout within the crop preview canvas (letterboxed)
+function getCropPreviewLayout(previewCanvas, img) {
+    const w = previewCanvas.width;
+    const h = previewCanvas.height;
+    const imgAspect = img.width / img.height;
+    const canvasAspect = w / h;
+    let drawW, drawH, drawX, drawY;
+    if (imgAspect > canvasAspect) {
+        drawW = w;
+        drawH = w / imgAspect;
+        drawX = 0;
+        drawY = (h - drawH) / 2;
+    } else {
+        drawH = h;
+        drawW = h * imgAspect;
+        drawX = (w - drawW) / 2;
+        drawY = 0;
+    }
+    return { drawX, drawY, drawW, drawH };
+}
+
+function updateCropPreview() {
+    const previewCanvas = document.getElementById('popout-crop-preview');
+    if (!previewCanvas) return;
+    const p = getSelectedPopout();
+    const screenshot = getCurrentScreenshot();
+    if (!p || !screenshot) return;
+    const img = getScreenshotImage(screenshot);
+    if (!img) return;
+
+    // Resize canvas to match sidebar width while keeping image aspect
+    const containerWidth = previewCanvas.parentElement?.clientWidth || 280;
+    const imgAspect = img.width / img.height;
+    const canvasW = containerWidth * 2; // 2x for retina
+    const canvasH = Math.round(canvasW / imgAspect);
+    previewCanvas.width = canvasW;
+    previewCanvas.height = canvasH;
+    previewCanvas.style.width = containerWidth + 'px';
+    previewCanvas.style.height = Math.round(containerWidth / imgAspect) + 'px';
+
+    const ctx2 = previewCanvas.getContext('2d');
+    const layout = getCropPreviewLayout(previewCanvas, img);
+    const { drawX, drawY, drawW, drawH } = layout;
+
+    ctx2.clearRect(0, 0, canvasW, canvasH);
+
+    // Draw full image
+    ctx2.drawImage(img, drawX, drawY, drawW, drawH);
+
+    // Dim overlay outside crop region
+    const rx = drawX + (p.cropX / 100) * drawW;
+    const ry = drawY + (p.cropY / 100) * drawH;
+    const rw = (p.cropWidth / 100) * drawW;
+    const rh = (p.cropHeight / 100) * drawH;
+
+    ctx2.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx2.fillRect(0, 0, canvasW, canvasH);
+
+    // Clear crop region to show undimmed image
+    ctx2.save();
+    ctx2.beginPath();
+    ctx2.rect(rx, ry, rw, rh);
+    ctx2.clip();
+    ctx2.clearRect(rx, ry, rw, rh);
+    ctx2.drawImage(img, drawX, drawY, drawW, drawH);
+    ctx2.restore();
+
+    // Crop border
+    ctx2.strokeStyle = 'rgba(10, 132, 255, 0.9)';
+    ctx2.lineWidth = 2;
+    ctx2.strokeRect(rx, ry, rw, rh);
+
+    // Corner handles (vector editor style)
+    const handleSize = 8;
+    const handles = [
+        { x: rx, y: ry },                     // top-left
+        { x: rx + rw, y: ry },                // top-right
+        { x: rx, y: ry + rh },                // bottom-left
+        { x: rx + rw, y: ry + rh },           // bottom-right
+    ];
+    // Edge midpoint handles
+    const midHandles = [
+        { x: rx + rw / 2, y: ry },            // top-center
+        { x: rx + rw / 2, y: ry + rh },       // bottom-center
+        { x: rx, y: ry + rh / 2 },            // left-center
+        { x: rx + rw, y: ry + rh / 2 },       // right-center
+    ];
+
+    ctx2.fillStyle = '#ffffff';
+    ctx2.strokeStyle = 'rgba(10, 132, 255, 1)';
+    ctx2.lineWidth = 1.5;
+    [...handles, ...midHandles].forEach(h => {
+        ctx2.fillRect(h.x - handleSize / 2, h.y - handleSize / 2, handleSize, handleSize);
+        ctx2.strokeRect(h.x - handleSize / 2, h.y - handleSize / 2, handleSize, handleSize);
+    });
+}
+
+// ===== Interactive crop preview drag =====
+let cropDragState = null;
+
+function setupCropPreviewDrag() {
+    const previewCanvas = document.getElementById('popout-crop-preview');
+    if (!previewCanvas) return;
+
+    function getCropCanvasCoords(e) {
+        const rect = previewCanvas.getBoundingClientRect();
+        const scaleX = previewCanvas.width / rect.width;
+        const scaleY = previewCanvas.height / rect.height;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
+        };
+    }
+
+    function hitTestCropHandle(coords) {
+        const p = getSelectedPopout();
+        const screenshot = getCurrentScreenshot();
+        if (!p || !screenshot) return null;
+        const img = getScreenshotImage(screenshot);
+        if (!img) return null;
+
+        const layout = getCropPreviewLayout(previewCanvas, img);
+        const { drawX, drawY, drawW, drawH } = layout;
+        const rx = drawX + (p.cropX / 100) * drawW;
+        const ry = drawY + (p.cropY / 100) * drawH;
+        const rw = (p.cropWidth / 100) * drawW;
+        const rh = (p.cropHeight / 100) * drawH;
+
+        const hitR = 12; // hit radius
+        const tests = [
+            { x: rx, y: ry, handle: 'top-left' },
+            { x: rx + rw, y: ry, handle: 'top-right' },
+            { x: rx, y: ry + rh, handle: 'bottom-left' },
+            { x: rx + rw, y: ry + rh, handle: 'bottom-right' },
+            { x: rx + rw / 2, y: ry, handle: 'top' },
+            { x: rx + rw / 2, y: ry + rh, handle: 'bottom' },
+            { x: rx, y: ry + rh / 2, handle: 'left' },
+            { x: rx + rw, y: ry + rh / 2, handle: 'right' },
+        ];
+        for (const t of tests) {
+            if (Math.abs(coords.x - t.x) < hitR && Math.abs(coords.y - t.y) < hitR) {
+                return t.handle;
+            }
+        }
+        // Check if inside the crop region (move)
+        if (coords.x >= rx && coords.x <= rx + rw && coords.y >= ry && coords.y <= ry + rh) {
+            return 'move';
+        }
+        return null;
+    }
+
+    function startCropDrag(e) {
+        const coords = getCropCanvasCoords(e);
+        const handle = hitTestCropHandle(coords);
+        if (!handle) return;
+
+        e.preventDefault();
+        const p = getSelectedPopout();
+        if (!p) return;
+        cropDragState = {
+            handle,
+            startX: coords.x,
+            startY: coords.y,
+            origCropX: p.cropX,
+            origCropY: p.cropY,
+            origCropW: p.cropWidth,
+            origCropH: p.cropHeight
+        };
+    }
+
+    function moveCropDrag(e) {
+        if (!cropDragState) {
+            // Update cursor based on hover
+            const coords = getCropCanvasCoords(e);
+            const handle = hitTestCropHandle(coords);
+            const cursorMap = {
+                'top-left': 'nwse-resize', 'bottom-right': 'nwse-resize',
+                'top-right': 'nesw-resize', 'bottom-left': 'nesw-resize',
+                'top': 'ns-resize', 'bottom': 'ns-resize',
+                'left': 'ew-resize', 'right': 'ew-resize',
+                'move': 'move'
+            };
+            previewCanvas.style.cursor = cursorMap[handle] || 'default';
+            return;
+        }
+        e.preventDefault();
+        const coords = getCropCanvasCoords(e);
+        const p = getSelectedPopout();
+        const screenshot = getCurrentScreenshot();
+        if (!p || !screenshot) return;
+        const img = getScreenshotImage(screenshot);
+        if (!img) return;
+
+        const layout = getCropPreviewLayout(previewCanvas, img);
+        const { drawW, drawH } = layout;
+
+        // Convert pixel delta to percentage
+        const dxPct = ((coords.x - cropDragState.startX) / drawW) * 100;
+        const dyPct = ((coords.y - cropDragState.startY) / drawH) * 100;
+        const h = cropDragState.handle;
+        const orig = cropDragState;
+
+        let newX = orig.origCropX, newY = orig.origCropY;
+        let newW = orig.origCropW, newH = orig.origCropH;
+
+        if (h === 'move') {
+            newX = Math.max(0, Math.min(100 - newW, orig.origCropX + dxPct));
+            newY = Math.max(0, Math.min(100 - newH, orig.origCropY + dyPct));
+        } else {
+            if (h.includes('left')) { newX = orig.origCropX + dxPct; newW = orig.origCropW - dxPct; }
+            if (h.includes('right') || h === 'right') { newW = orig.origCropW + dxPct; }
+            if (h.includes('top')) { newY = orig.origCropY + dyPct; newH = orig.origCropH - dyPct; }
+            if (h.includes('bottom') || h === 'bottom') { newH = orig.origCropH + dyPct; }
+
+            // Enforce minimums
+            if (newW < 5) { if (h.includes('left')) newX = orig.origCropX + orig.origCropW - 5; newW = 5; }
+            if (newH < 5) { if (h.includes('top')) newY = orig.origCropY + orig.origCropH - 5; newH = 5; }
+
+            // Clamp to canvas bounds
+            newX = Math.max(0, newX);
+            newY = Math.max(0, newY);
+            if (newX + newW > 100) newW = 100 - newX;
+            if (newY + newH > 100) newH = 100 - newY;
+        }
+
+        p.cropX = newX;
+        p.cropY = newY;
+        p.cropWidth = newW;
+        p.cropHeight = newH;
+        updateCropPreview();
+        updatePopoutProperties();
+        updateCanvas();
+    }
+
+    function endCropDrag() {
+        cropDragState = null;
+    }
+
+    previewCanvas.addEventListener('mousedown', startCropDrag);
+    window.addEventListener('mousemove', moveCropDrag);
+    window.addEventListener('mouseup', endCropDrag);
+    previewCanvas.addEventListener('touchstart', startCropDrag, { passive: false });
+    previewCanvas.addEventListener('touchmove', (e) => { if (cropDragState) moveCropDrag(e); }, { passive: false });
+    previewCanvas.addEventListener('touchend', endCropDrag);
+}
+
+function setupPopoutEventListeners() {
+    // Add Popout button
+    const addBtn = document.getElementById('add-popout-btn');
+    if (addBtn) {
+        addBtn.addEventListener('click', () => addPopout());
+    }
+
+    // Crop sliders
+    const bindPopoutSlider = (id, key, suffix) => {
+        const input = document.getElementById(id);
+        const valueEl = document.getElementById(id + '-value');
+        if (!input) return;
+        input.addEventListener('input', () => {
+            const val = parseFloat(input.value);
+            if (valueEl) valueEl.textContent = formatValue(val) + suffix;
+            if (selectedPopoutId) setPopoutProperty(selectedPopoutId, key, val);
+            if (key.startsWith('crop')) updateCropPreview();
+        });
+    };
+
+    bindPopoutSlider('popout-crop-x', 'cropX', '%');
+    bindPopoutSlider('popout-crop-y', 'cropY', '%');
+    bindPopoutSlider('popout-crop-width', 'cropWidth', '%');
+    bindPopoutSlider('popout-crop-height', 'cropHeight', '%');
+    bindPopoutSlider('popout-x', 'x', '%');
+    bindPopoutSlider('popout-y', 'y', '%');
+    bindPopoutSlider('popout-width', 'width', '%');
+    bindPopoutSlider('popout-rotation', 'rotation', '°');
+    bindPopoutSlider('popout-opacity', 'opacity', '%');
+    bindPopoutSlider('popout-corner-radius', 'cornerRadius', 'px');
+
+    // Shadow toggle
+    const shadowToggle = document.getElementById('popout-shadow-toggle');
+    if (shadowToggle) {
+        shadowToggle.addEventListener('click', () => {
+            const p = getSelectedPopout();
+            if (!p) return;
+            p.shadow.enabled = !p.shadow.enabled;
+            updatePopoutProperties();
+            updateCanvas();
+        });
+    }
+
+    // Shadow properties
+    const bindPopoutShadow = (inputId, prop, suffix) => {
+        const input = document.getElementById(inputId);
+        const valEl = document.getElementById(inputId + '-value');
+        if (!input) return;
+        input.addEventListener('input', () => {
+            const p = getSelectedPopout();
+            if (!p) return;
+            p.shadow[prop] = parseFloat(input.value);
+            if (valEl) valEl.textContent = formatValue(parseFloat(input.value)) + suffix;
+            updateCanvas();
+        });
+    };
+    bindPopoutShadow('popout-shadow-blur', 'blur', 'px');
+    bindPopoutShadow('popout-shadow-opacity', 'opacity', '%');
+    bindPopoutShadow('popout-shadow-x', 'x', 'px');
+    bindPopoutShadow('popout-shadow-y', 'y', 'px');
+
+    // Shadow color
+    const shadowColor = document.getElementById('popout-shadow-color');
+    const shadowColorHex = document.getElementById('popout-shadow-color-hex');
+    if (shadowColor) {
+        shadowColor.addEventListener('input', () => {
+            const p = getSelectedPopout();
+            if (p) { p.shadow.color = shadowColor.value; if (shadowColorHex) shadowColorHex.value = shadowColor.value; updateCanvas(); }
+        });
+    }
+    if (shadowColorHex) {
+        shadowColorHex.addEventListener('change', () => {
+            if (/^#[0-9a-fA-F]{6}$/.test(shadowColorHex.value)) {
+                const p = getSelectedPopout();
+                if (p) { p.shadow.color = shadowColorHex.value; if (shadowColor) shadowColor.value = shadowColorHex.value; updateCanvas(); }
+            }
+        });
+    }
+
+    // Border toggle
+    const borderToggle = document.getElementById('popout-border-toggle');
+    if (borderToggle) {
+        borderToggle.addEventListener('click', () => {
+            const p = getSelectedPopout();
+            if (!p) return;
+            p.border.enabled = !p.border.enabled;
+            updatePopoutProperties();
+            updateCanvas();
+        });
+    }
+
+    // Border properties
+    const bindPopoutBorder = (inputId, prop, suffix) => {
+        const input = document.getElementById(inputId);
+        const valEl = document.getElementById(inputId + '-value');
+        if (!input) return;
+        input.addEventListener('input', () => {
+            const p = getSelectedPopout();
+            if (!p) return;
+            p.border[prop] = parseFloat(input.value);
+            if (valEl) valEl.textContent = formatValue(parseFloat(input.value)) + suffix;
+            updateCanvas();
+        });
+    };
+    bindPopoutBorder('popout-border-width', 'width', 'px');
+    bindPopoutBorder('popout-border-opacity', 'opacity', '%');
+
+    // Border color
+    const borderColor = document.getElementById('popout-border-color');
+    const borderColorHex = document.getElementById('popout-border-color-hex');
+    if (borderColor) {
+        borderColor.addEventListener('input', () => {
+            const p = getSelectedPopout();
+            if (p) { p.border.color = borderColor.value; if (borderColorHex) borderColorHex.value = borderColor.value; updateCanvas(); }
+        });
+    }
+    if (borderColorHex) {
+        borderColorHex.addEventListener('change', () => {
+            if (/^#[0-9a-fA-F]{6}$/.test(borderColorHex.value)) {
+                const p = getSelectedPopout();
+                if (p) { p.border.color = borderColorHex.value; if (borderColor) borderColor.value = borderColorHex.value; updateCanvas(); }
+            }
+        });
+    }
+
+    // Interactive crop preview drag handles
+    setupCropPreviewDrag();
 }
 
 function setupEventListeners() {
@@ -5079,6 +5806,7 @@ function createNewScreenshot(img, src, name, lang, deviceType) {
         screenshot: JSON.parse(JSON.stringify(state.defaults.screenshot)),
         text: JSON.parse(JSON.stringify(state.defaults.text)),
         elements: JSON.parse(JSON.stringify(state.defaults.elements || [])),
+        popouts: [],
         // Legacy overrides for backwards compatibility
         overrides: {}
     });
@@ -5487,6 +6215,8 @@ function transferStyle(sourceIndex, targetIndex) {
         return copy;
     });
 
+    // Explicitly skip popouts — crop regions are specific to each screenshot's source image
+
     // Reset transfer mode
     state.transferTarget = null;
 
@@ -5545,6 +6275,8 @@ function applyStyleToAll() {
             copy.id = crypto.randomUUID();
             return copy;
         });
+
+        // Explicitly skip popouts — crop regions are specific to each screenshot's source image
     });
 
     applyStyleSourceIndex = null;
@@ -5714,6 +6446,9 @@ function updateCanvas() {
 
     // Elements above screenshot but behind text
     drawElements(ctx, dims, 'above-screenshot');
+
+    // Draw popouts (cropped regions from source image)
+    drawPopouts(ctx, dims);
 
     // Draw text
     drawText();
@@ -5958,6 +6693,10 @@ function renderScreenshotToCanvas(index, targetCanvas, targetCtx, dims, previewS
 
     // Elements above screenshot
     drawElementsToContext(targetCtx, dims, elements, 'above-screenshot');
+
+    // Draw popouts
+    const popouts = screenshot.popouts || [];
+    drawPopoutsToContext(targetCtx, dims, popouts, img, settings);
 
     // Draw text
     const txt = screenshot.text;
@@ -6346,6 +7085,93 @@ function drawElementsToContext(context, dims, elements, layer) {
                 context.fillText(line, 0, startY + i * lineHeight);
             });
         }
+
+        context.restore();
+    });
+}
+
+// ===== Popout rendering =====
+function drawPopouts(context, dims) {
+    const screenshot = getCurrentScreenshot();
+    if (!screenshot) return;
+    const img = getScreenshotImage(screenshot);
+    if (!img) return;
+    const popouts = screenshot.popouts || [];
+    const ss = getScreenshotSettings();
+    drawPopoutsToContext(context, dims, popouts, img, ss);
+}
+
+function drawPopoutsToContext(context, dims, popouts, img, screenshotSettings) {
+    if (!img || !popouts || popouts.length === 0) return;
+
+    popouts.forEach(p => {
+        context.save();
+        context.globalAlpha = p.opacity / 100;
+
+        // Crop from source image (percentages -> pixels)
+        const sx = (p.cropX / 100) * img.width;
+        const sy = (p.cropY / 100) * img.height;
+        const sw = (p.cropWidth / 100) * img.width;
+        const sh = (p.cropHeight / 100) * img.height;
+
+        // Display position and size (percentages -> canvas pixels)
+        const displayW = dims.width * (p.width / 100);
+        const cropAspect = sh / sw;
+        const displayH = displayW * cropAspect;
+        const cx = dims.width * (p.x / 100);
+        const cy = dims.height * (p.y / 100);
+
+        context.translate(cx, cy);
+
+        // Apply popout's own rotation only (no 3D transform inheritance)
+        if (p.rotation !== 0) {
+            context.rotate(p.rotation * Math.PI / 180);
+        }
+
+        const halfW = displayW / 2;
+        const halfH = displayH / 2;
+        const radius = p.cornerRadius * (displayW / 300);
+
+        // Draw shadow
+        if (p.shadow && p.shadow.enabled) {
+            const shadowOpacity = p.shadow.opacity / 100;
+            const hex = p.shadow.color || '#000000';
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            context.shadowColor = `rgba(${r},${g},${b},${shadowOpacity})`;
+            context.shadowBlur = p.shadow.blur;
+            context.shadowOffsetX = p.shadow.x;
+            context.shadowOffsetY = p.shadow.y;
+
+            context.fillStyle = '#000';
+            context.beginPath();
+            context.roundRect(-halfW, -halfH, displayW, displayH, radius);
+            context.fill();
+
+            context.shadowColor = 'transparent';
+            context.shadowBlur = 0;
+            context.shadowOffsetX = 0;
+            context.shadowOffsetY = 0;
+        }
+
+        // Draw border behind the image
+        if (p.border && p.border.enabled) {
+            const bw = p.border.width;
+            context.save();
+            context.globalAlpha = (p.opacity / 100) * (p.border.opacity / 100);
+            context.fillStyle = p.border.color;
+            context.beginPath();
+            context.roundRect(-halfW - bw, -halfH - bw, displayW + bw * 2, displayH + bw * 2, radius + bw);
+            context.fill();
+            context.restore();
+        }
+
+        // Clip and draw cropped image
+        context.beginPath();
+        context.roundRect(-halfW, -halfH, displayW, displayH, radius);
+        context.clip();
+        context.drawImage(img, sx, sy, sw, sh, -halfW, -halfH, displayW, displayH);
 
         context.restore();
     });
