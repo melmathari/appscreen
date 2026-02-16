@@ -89,6 +89,14 @@ const state = {
 let selectedElementId = null;
 let draggingElement = null;
 
+// Preload laurel SVG images for element frames
+const laurelImages = {};
+['laurel-simple-left', 'laurel-detailed-left'].forEach(name => {
+    const img = new Image();
+    img.src = `img/${name}.svg`;
+    laurelImages[name] = img;
+});
+
 // Helper functions to get/set current screenshot settings
 function getCurrentScreenshot() {
     if (state.screenshots.length === 0) return null;
@@ -6013,8 +6021,8 @@ function drawElementsToContext(context, dims, elements, layer) {
 
             // Measure text for frame drawing
             const lines = el.text.split('\n');
-            const lineHeight = el.fontSize * 1.2;
-            const totalHeight = lines.length * lineHeight;
+            const lineHeight = el.fontSize * 1.05;
+            const totalHeight = (lines.length - 1) * lineHeight + el.fontSize;
 
             // Draw frame behind text if enabled
             if (el.frame && el.frame !== 'none') {
@@ -6022,7 +6030,7 @@ function drawElementsToContext(context, dims, elements, layer) {
             }
 
             // Draw text lines
-            const startY = -(totalHeight / 2) + lineHeight / 2;
+            const startY = -(totalHeight / 2) + el.fontSize / 2;
             lines.forEach((line, i) => {
                 context.fillText(line, 0, startY + i * lineHeight);
             });
@@ -6036,7 +6044,10 @@ function drawElementsToContext(context, dims, elements, layer) {
 function drawElementFrame(context, el, dims, textWidth, textHeight) {
     const scale = el.frameScale / 100;
     const padding = el.fontSize * 0.4 * scale;
-    const frameW = Math.max(textWidth, context.measureText(el.text).width) + padding * 2;
+    // Measure the widest line rather than the full string or element width
+    const lines = el.text.split('\n');
+    const maxLineW = Math.max(...lines.map(l => context.measureText(l).width));
+    const frameW = maxLineW + padding * 2;
     const frameH = textHeight + padding * 2;
 
     context.save();
@@ -6044,18 +6055,21 @@ function drawElementFrame(context, el, dims, textWidth, textHeight) {
     context.fillStyle = 'none';
     context.lineWidth = Math.max(2, el.fontSize * 0.04) * scale;
 
-    if (el.frame === 'laurel') {
-        drawLaurelWreath(context, frameW, frameH, scale, el.frameColor);
-    } else if (el.frame === 'laurel-star') {
-        drawLaurelWreath(context, frameW, frameH, scale, el.frameColor);
-        drawStar(context, 0, -frameH / 2 - el.fontSize * 0.15 * scale, el.fontSize * 0.3 * scale, el.frameColor);
+    const isLaurel = el.frame.startsWith('laurel-');
+    const hasStar = el.frame.endsWith('-star');
+
+    if (isLaurel) {
+        const variant = el.frame.includes('detailed') ? 'laurel-detailed-left' : 'laurel-simple-left';
+        drawLaurelSVG(context, variant, frameW, frameH, scale, el.frameColor);
+        if (hasStar) {
+            drawStar(context, 0, -frameH / 2 - el.fontSize * 0.2 * scale, el.fontSize * 0.3 * scale, el.frameColor);
+        }
     } else if (el.frame === 'badge-circle') {
         context.beginPath();
         const radius = Math.max(frameW, frameH) / 2 + padding * 0.5;
         context.arc(0, 0, radius, 0, Math.PI * 2);
         context.stroke();
     } else if (el.frame === 'badge-ribbon') {
-        // Shield shape
         const sw = frameW + padding;
         const sh = frameH + padding * 1.5;
         context.beginPath();
@@ -6071,64 +6085,60 @@ function drawElementFrame(context, el, dims, textWidth, textHeight) {
     context.restore();
 }
 
-// Draw laurel wreath branches
-function drawLaurelWreath(context, w, h, scale, color) {
+// Draw laurel wreath using SVG image — left branch + mirrored right branch
+function drawLaurelSVG(context, variant, w, h, scale, color) {
+    const img = laurelImages[variant];
+    if (!img || !img.complete || !img.naturalWidth) return;
+
+    // Scale SVG branch to match the frame height
+    const branchH = h * 1.1 * scale;
+    const aspect = img.naturalWidth / img.naturalHeight;
+    const branchW = branchH * aspect;
+
+    // The SVG is black fill — use a temp canvas to recolor it
+    const tmp = document.createElement('canvas');
+    tmp.width = Math.ceil(branchW);
+    tmp.height = Math.ceil(branchH);
+    const tctx = tmp.getContext('2d');
+
+    // Draw the SVG scaled into the temp canvas
+    tctx.drawImage(img, 0, 0, branchW, branchH);
+
+    // Recolor: draw color on top using source-in composite
+    tctx.globalCompositeOperation = 'source-in';
+    tctx.fillStyle = color;
+    tctx.fillRect(0, 0, branchW, branchH);
+
+    // Position: left branch sits to the left of the text area
+    const gap = 2 * scale;
+    const leftX = -w / 2 - branchW - gap;
+    const topY = -branchH / 2;
+
+    // Draw left branch
+    context.drawImage(tmp, leftX, topY, branchW, branchH);
+
+    // Draw right branch (mirrored horizontally)
     context.save();
-    context.strokeStyle = color;
-    context.fillStyle = color;
-    context.lineWidth = Math.max(1, 2 * scale);
-
-    const branchH = h * 0.5;
-    const leaves = 6;
-
-    // Left branch
-    for (let i = 0; i < leaves; i++) {
-        const t = i / (leaves - 1);
-        const bx = -w / 2 - 5 * scale;
-        const by = branchH * (t - 0.5);
-        const leafSize = 8 * scale;
-        const angle = -0.4 + t * 0.8;
-
-        context.save();
-        context.translate(bx, by);
-        context.rotate(angle);
-        context.beginPath();
-        context.ellipse(0, 0, leafSize, leafSize * 0.4, 0, 0, Math.PI * 2);
-        context.fill();
-        context.restore();
-    }
-
-    // Right branch (mirrored)
-    for (let i = 0; i < leaves; i++) {
-        const t = i / (leaves - 1);
-        const bx = w / 2 + 5 * scale;
-        const by = branchH * (t - 0.5);
-        const leafSize = 8 * scale;
-        const angle = Math.PI + 0.4 - t * 0.8;
-
-        context.save();
-        context.translate(bx, by);
-        context.rotate(angle);
-        context.beginPath();
-        context.ellipse(0, 0, leafSize, leafSize * 0.4, 0, 0, Math.PI * 2);
-        context.fill();
-        context.restore();
-    }
-
+    context.scale(-1, 1);
+    context.drawImage(tmp, leftX, topY, branchW, branchH);
     context.restore();
 }
 
-// Draw a star shape
+// Draw a 5-point star
 function drawStar(context, cx, cy, size, color) {
     context.save();
     context.fillStyle = color;
     context.beginPath();
     for (let i = 0; i < 5; i++) {
-        const angle = (i * 4 * Math.PI / 5) - Math.PI / 2;
-        const x = cx + Math.cos(angle) * size;
-        const y = cy + Math.sin(angle) * size;
-        if (i === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
+        const outer = (i * 2 * Math.PI / 5) - Math.PI / 2;
+        const inner = outer + Math.PI / 5;
+        const ox = cx + Math.cos(outer) * size;
+        const oy = cy + Math.sin(outer) * size;
+        const ix = cx + Math.cos(inner) * size * 0.4;
+        const iy = cy + Math.sin(inner) * size * 0.4;
+        if (i === 0) context.moveTo(ox, oy);
+        else context.lineTo(ox, oy);
+        context.lineTo(ix, iy);
     }
     context.closePath();
     context.fill();
