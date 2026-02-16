@@ -80,9 +80,14 @@ const state = {
             subheadlineStrikethrough: false,
             subheadlineColor: '#ffffff',
             subheadlineOpacity: 70
-        }
+        },
+        elements: []
     }
 };
+
+// Runtime-only state (not persisted)
+let selectedElementId = null;
+let draggingElement = null;
 
 // Helper functions to get/set current screenshot settings
 function getCurrentScreenshot() {
@@ -103,6 +108,114 @@ function getScreenshotSettings() {
 function getText() {
     const screenshot = getCurrentScreenshot();
     return screenshot ? screenshot.text : state.defaults.text;
+}
+
+function getElements() {
+    const screenshot = getCurrentScreenshot();
+    return screenshot ? (screenshot.elements || []) : [];
+}
+
+function getSelectedElement() {
+    if (!selectedElementId) return null;
+    return getElements().find(el => el.id === selectedElementId) || null;
+}
+
+function setElementProperty(id, key, value) {
+    const elements = getElements();
+    const el = elements.find(e => e.id === id);
+    if (el) {
+        el[key] = value;
+        updateCanvas();
+        updateElementsList();
+    }
+}
+
+function addGraphicElement(img, src, name) {
+    const screenshot = getCurrentScreenshot();
+    if (!screenshot) return;
+    if (!screenshot.elements) screenshot.elements = [];
+    const el = {
+        id: crypto.randomUUID(),
+        type: 'graphic',
+        x: 50, y: 50,
+        width: 20,
+        rotation: 0,
+        opacity: 100,
+        layer: 'above-text',
+        image: img,
+        src: src,
+        name: name || 'Graphic',
+        text: '',
+        font: "-apple-system, BlinkMacSystemFont, 'SF Pro Display'",
+        fontSize: 60,
+        fontWeight: '600',
+        fontColor: '#ffffff',
+        italic: false,
+        frame: 'none',
+        frameColor: '#ffffff',
+        frameScale: 100
+    };
+    screenshot.elements.push(el);
+    selectedElementId = el.id;
+    updateCanvas();
+    updateElementsList();
+    updateElementProperties();
+}
+
+function addTextElement() {
+    const screenshot = getCurrentScreenshot();
+    if (!screenshot) return;
+    if (!screenshot.elements) screenshot.elements = [];
+    const el = {
+        id: crypto.randomUUID(),
+        type: 'text',
+        x: 50, y: 50,
+        width: 40,
+        rotation: 0,
+        opacity: 100,
+        layer: 'above-text',
+        image: null,
+        src: null,
+        name: 'Text',
+        text: 'Your Text',
+        font: "-apple-system, BlinkMacSystemFont, 'SF Pro Display'",
+        fontSize: 60,
+        fontWeight: '600',
+        fontColor: '#ffffff',
+        italic: false,
+        frame: 'none',
+        frameColor: '#ffffff',
+        frameScale: 100
+    };
+    screenshot.elements.push(el);
+    selectedElementId = el.id;
+    updateCanvas();
+    updateElementsList();
+    updateElementProperties();
+}
+
+function deleteElement(id) {
+    const screenshot = getCurrentScreenshot();
+    if (!screenshot || !screenshot.elements) return;
+    screenshot.elements = screenshot.elements.filter(e => e.id !== id);
+    if (selectedElementId === id) selectedElementId = null;
+    updateCanvas();
+    updateElementsList();
+    updateElementProperties();
+}
+
+function moveElementLayer(id, direction) {
+    const screenshot = getCurrentScreenshot();
+    if (!screenshot || !screenshot.elements) return;
+    const idx = screenshot.elements.findIndex(e => e.id === id);
+    if (idx === -1) return;
+    if (direction === 'up' && idx < screenshot.elements.length - 1) {
+        [screenshot.elements[idx], screenshot.elements[idx + 1]] = [screenshot.elements[idx + 1], screenshot.elements[idx]];
+    } else if (direction === 'down' && idx > 0) {
+        [screenshot.elements[idx], screenshot.elements[idx - 1]] = [screenshot.elements[idx - 1], screenshot.elements[idx]];
+    }
+    updateCanvas();
+    updateElementsList();
 }
 
 // Format number to at most 1 decimal place
@@ -1002,6 +1115,7 @@ async function init() {
 // Set up event listeners immediately (don't wait for async init)
 function initSync() {
     setupEventListeners();
+    setupElementEventListeners();
     initFontPicker();
     updateGradientStopsUI();
     updateCanvas();
@@ -1037,6 +1151,10 @@ function saveState() {
             background: s.background,
             screenshot: s.screenshot,
             text: s.text,
+            elements: (s.elements || []).map(el => ({
+                ...el,
+                image: undefined // Don't serialize Image objects
+            })),
             overrides: s.overrides
         };
     });
@@ -1087,6 +1205,20 @@ function migrate3DPosition(screenshotSettings) {
 
     screenshotSettings.x = Math.max(0, Math.min(100, 50 + (oldX - 50) * xFactor));
     screenshotSettings.y = Math.max(0, Math.min(100, 50 + (oldY - 50) * yFactor));
+}
+
+// Reconstruct Image objects for graphic elements from saved src data URLs
+function reconstructElementImages(elements) {
+    if (!elements || !Array.isArray(elements)) return [];
+    return elements.map(el => {
+        const restored = { ...el };
+        if (el.type === 'graphic' && el.src) {
+            const img = new Image();
+            img.src = el.src;
+            restored.image = img;
+        }
+        return restored;
+    });
 }
 
 // Load state from IndexedDB for current project
@@ -1163,6 +1295,7 @@ function loadState() {
                                     background: s.background || JSON.parse(JSON.stringify(migratedBackground)),
                                     screenshot: screenshotSettings,
                                     text: s.text || JSON.parse(JSON.stringify(migratedText)),
+                                    elements: reconstructElementImages(s.elements),
                                     overrides: s.overrides || {}
                                 };
                                 loadedCount++;
@@ -1200,6 +1333,7 @@ function loadState() {
                                                     background: s.background || JSON.parse(JSON.stringify(migratedBackground)),
                                                     screenshot: screenshotSettings,
                                                     text: s.text || JSON.parse(JSON.stringify(migratedText)),
+                                                    elements: reconstructElementImages(s.elements),
                                                     overrides: s.overrides || {}
                                                 };
                                                 loadedCount++;
@@ -1243,6 +1377,7 @@ function loadState() {
                                         background: s.background || JSON.parse(JSON.stringify(migratedBackground)),
                                         screenshot: screenshotSettings,
                                         text: s.text || JSON.parse(JSON.stringify(migratedText)),
+                                        elements: reconstructElementImages(s.elements),
                                         overrides: s.overrides || {}
                                     };
                                     loadedCount++;
@@ -1284,6 +1419,8 @@ function loadState() {
                     // Load defaults (new format) or use migrated settings
                     if (parsed.defaults) {
                         state.defaults = parsed.defaults;
+                        // Ensure elements array exists (may be missing from older saves)
+                        if (!state.defaults.elements) state.defaults.elements = [];
                     } else {
                         state.defaults.background = migratedBackground;
                         state.defaults.screenshot = migratedScreenshot;
@@ -1736,6 +1873,490 @@ function syncUIWithState() {
     if (use3D && typeof switchPhoneModel === 'function') {
         switchPhoneModel(device3D);
     }
+
+    // Elements
+    selectedElementId = null;
+    updateElementsList();
+    updateElementProperties();
+}
+
+// ===== Elements Tab UI =====
+
+function updateElementsList() {
+    const listEl = document.getElementById('elements-list');
+    const emptyEl = document.getElementById('elements-empty');
+    if (!listEl) return;
+
+    const elements = getElements();
+
+    // Remove old items (keep the empty message)
+    listEl.querySelectorAll('.element-item').forEach(el => el.remove());
+
+    if (elements.length === 0) {
+        if (emptyEl) emptyEl.style.display = '';
+        return;
+    }
+
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    elements.forEach(el => {
+        const item = document.createElement('div');
+        item.className = 'element-item' + (el.id === selectedElementId ? ' selected' : '');
+        item.dataset.elementId = el.id;
+
+        const layerLabels = {
+            'behind-screenshot': 'Behind',
+            'above-screenshot': 'Middle',
+            'above-text': 'Front'
+        };
+
+        let thumbContent;
+        if (el.type === 'graphic' && el.image) {
+            thumbContent = `<img src="${el.image.src}" alt="${el.name}">`;
+        } else {
+            thumbContent = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>
+            </svg>`;
+        }
+
+        item.innerHTML = `
+            <div class="element-item-thumb">${thumbContent}</div>
+            <div class="element-item-info">
+                <div class="element-item-name">${el.type === 'text' ? (el.text || 'Text') : el.name}</div>
+                <div class="element-item-layer">${layerLabels[el.layer] || el.layer}</div>
+            </div>
+            <div class="element-item-actions">
+                <button class="element-item-btn" data-action="move-up" title="Move up">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="18 15 12 9 6 15"/>
+                    </svg>
+                </button>
+                <button class="element-item-btn" data-action="move-down" title="Move down">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </button>
+                <button class="element-item-btn danger" data-action="delete" title="Delete">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        `;
+
+        // Click to select
+        item.addEventListener('click', (e) => {
+            if (e.target.closest('.element-item-btn')) return;
+            selectedElementId = el.id;
+            updateElementsList();
+            updateElementProperties();
+        });
+
+        // Action buttons
+        item.querySelectorAll('.element-item-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const action = btn.dataset.action;
+                if (action === 'delete') deleteElement(el.id);
+                else if (action === 'move-up') moveElementLayer(el.id, 'up');
+                else if (action === 'move-down') moveElementLayer(el.id, 'down');
+            });
+        });
+
+        listEl.appendChild(item);
+    });
+}
+
+function updateElementProperties() {
+    const propsEl = document.getElementById('element-properties');
+    if (!propsEl) return;
+
+    const el = getSelectedElement();
+    if (!el) {
+        propsEl.style.display = 'none';
+        return;
+    }
+
+    propsEl.style.display = '';
+    document.getElementById('element-properties-title').textContent =
+        el.type === 'text' ? 'Text Element' : el.name || 'Graphic';
+
+    document.getElementById('element-layer').value = el.layer;
+    document.getElementById('element-x').value = el.x;
+    document.getElementById('element-x-value').textContent = formatValue(el.x) + '%';
+    document.getElementById('element-y').value = el.y;
+    document.getElementById('element-y-value').textContent = formatValue(el.y) + '%';
+    document.getElementById('element-width').value = el.width;
+    document.getElementById('element-width-value').textContent = formatValue(el.width) + '%';
+    document.getElementById('element-rotation').value = el.rotation;
+    document.getElementById('element-rotation-value').textContent = formatValue(el.rotation) + '°';
+    document.getElementById('element-opacity').value = el.opacity;
+    document.getElementById('element-opacity-value').textContent = formatValue(el.opacity) + '%';
+
+    // Text-specific properties
+    const textProps = document.getElementById('element-text-properties');
+    if (el.type === 'text') {
+        textProps.style.display = '';
+        document.getElementById('element-text-input').value = el.text || '';
+        document.getElementById('element-font-size').value = el.fontSize;
+        document.getElementById('element-font-size-value').textContent = el.fontSize;
+        document.getElementById('element-font-color').value = el.fontColor;
+        document.getElementById('element-font-weight').value = el.fontWeight;
+        document.getElementById('element-italic-btn').classList.toggle('active', el.italic);
+        document.getElementById('element-frame').value = el.frame || 'none';
+        const frameOpts = document.getElementById('element-frame-options');
+        frameOpts.style.display = el.frame && el.frame !== 'none' ? '' : 'none';
+        if (el.frame && el.frame !== 'none') {
+            document.getElementById('element-frame-color').value = el.frameColor;
+            document.getElementById('element-frame-color-hex').value = el.frameColor;
+            document.getElementById('element-frame-scale').value = el.frameScale;
+            document.getElementById('element-frame-scale-value').textContent = formatValue(el.frameScale) + '%';
+        }
+    } else {
+        textProps.style.display = 'none';
+    }
+}
+
+function setupElementEventListeners() {
+    // Add Graphic button
+    const addGraphicBtn = document.getElementById('add-graphic-btn');
+    const graphicInput = document.getElementById('element-graphic-input');
+    if (addGraphicBtn && graphicInput) {
+        addGraphicBtn.addEventListener('click', () => graphicInput.click());
+        graphicInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const img = new Image();
+                img.onload = () => {
+                    addGraphicElement(img, ev.target.result, file.name);
+                };
+                img.src = ev.target.result;
+            };
+            reader.readAsDataURL(file);
+            graphicInput.value = '';
+        });
+    }
+
+    // Add Text button
+    const addTextBtn = document.getElementById('add-text-element-btn');
+    if (addTextBtn) {
+        addTextBtn.addEventListener('click', () => addTextElement());
+    }
+
+    // Property sliders
+    const bindSlider = (id, prop, suffix, parser) => {
+        const input = document.getElementById(id);
+        const valueEl = document.getElementById(id + '-value');
+        if (!input) return;
+        input.addEventListener('input', () => {
+            const val = parser ? parser(input.value) : parseFloat(input.value);
+            if (valueEl) valueEl.textContent = formatValue(val) + suffix;
+            if (selectedElementId) setElementProperty(selectedElementId, prop, val);
+        });
+    };
+
+    bindSlider('element-x', 'x', '%');
+    bindSlider('element-y', 'y', '%');
+    bindSlider('element-width', 'width', '%');
+    bindSlider('element-rotation', 'rotation', '°');
+    bindSlider('element-opacity', 'opacity', '%');
+    bindSlider('element-font-size', 'fontSize', '', parseInt);
+    bindSlider('element-frame-scale', 'frameScale', '%');
+
+    // Layer dropdown
+    const layerSelect = document.getElementById('element-layer');
+    if (layerSelect) {
+        layerSelect.addEventListener('change', () => {
+            if (selectedElementId) {
+                setElementProperty(selectedElementId, 'layer', layerSelect.value);
+            }
+        });
+    }
+
+    // Text input
+    const textInput = document.getElementById('element-text-input');
+    if (textInput) {
+        textInput.addEventListener('input', () => {
+            if (selectedElementId) setElementProperty(selectedElementId, 'text', textInput.value);
+        });
+    }
+
+    // Font color
+    const fontColor = document.getElementById('element-font-color');
+    if (fontColor) {
+        fontColor.addEventListener('input', () => {
+            if (selectedElementId) setElementProperty(selectedElementId, 'fontColor', fontColor.value);
+        });
+    }
+
+    // Font weight
+    const fontWeight = document.getElementById('element-font-weight');
+    if (fontWeight) {
+        fontWeight.addEventListener('change', () => {
+            if (selectedElementId) setElementProperty(selectedElementId, 'fontWeight', fontWeight.value);
+        });
+    }
+
+    // Italic button
+    const italicBtn = document.getElementById('element-italic-btn');
+    if (italicBtn) {
+        italicBtn.addEventListener('click', () => {
+            const el = getSelectedElement();
+            if (el) {
+                setElementProperty(el.id, 'italic', !el.italic);
+                italicBtn.classList.toggle('active', el.italic);
+            }
+        });
+    }
+
+    // Frame dropdown
+    const frameSelect = document.getElementById('element-frame');
+    if (frameSelect) {
+        frameSelect.addEventListener('change', () => {
+            if (selectedElementId) {
+                setElementProperty(selectedElementId, 'frame', frameSelect.value);
+                document.getElementById('element-frame-options').style.display =
+                    frameSelect.value !== 'none' ? '' : 'none';
+            }
+        });
+    }
+
+    // Frame color
+    const frameColor = document.getElementById('element-frame-color');
+    const frameColorHex = document.getElementById('element-frame-color-hex');
+    if (frameColor) {
+        frameColor.addEventListener('input', () => {
+            if (selectedElementId) {
+                setElementProperty(selectedElementId, 'frameColor', frameColor.value);
+                if (frameColorHex) frameColorHex.value = frameColor.value;
+            }
+        });
+    }
+    if (frameColorHex) {
+        frameColorHex.addEventListener('change', () => {
+            if (selectedElementId && /^#[0-9a-fA-F]{6}$/.test(frameColorHex.value)) {
+                setElementProperty(selectedElementId, 'frameColor', frameColorHex.value);
+                if (frameColor) frameColor.value = frameColorHex.value;
+            }
+        });
+    }
+
+    // Canvas drag interaction for elements
+    setupElementCanvasDrag();
+}
+
+function setupElementCanvasDrag() {
+    const canvasWrapper = document.getElementById('canvas-wrapper');
+    const previewCanvas = document.getElementById('preview-canvas');
+    if (!previewCanvas) return;
+
+    // Snap guides state
+    const SNAP_THRESHOLD = 1.5; // percentage units (of canvas width/height)
+    let activeSnapGuides = { x: null, y: null }; // which guides are active
+
+    function getCanvasCoords(e) {
+        const rect = previewCanvas.getBoundingClientRect();
+        const scaleX = previewCanvas.width / rect.width;
+        const scaleY = previewCanvas.height / rect.height;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
+        };
+    }
+
+    function snapToGuides(x, y) {
+        const snapped = { x, y };
+        activeSnapGuides = { x: null, y: null };
+
+        // Snap to horizontal center (x = 50%)
+        if (Math.abs(x - 50) < SNAP_THRESHOLD) {
+            snapped.x = 50;
+            activeSnapGuides.x = 50;
+        }
+
+        // Snap to vertical middle (y = 50%)
+        if (Math.abs(y - 50) < SNAP_THRESHOLD) {
+            snapped.y = 50;
+            activeSnapGuides.y = 50;
+        }
+
+        return snapped;
+    }
+
+    function hitTestElements(canvasX, canvasY) {
+        const elements = getElements();
+        const dims = getCanvasDimensions();
+        // Test in reverse order (topmost first)
+        const layers = ['above-text', 'above-screenshot', 'behind-screenshot'];
+        for (const layer of layers) {
+            const layerEls = elements.filter(el => el.layer === layer).reverse();
+            for (const el of layerEls) {
+                const cx = dims.width * (el.x / 100);
+                const cy = dims.height * (el.y / 100);
+                const elWidth = dims.width * (el.width / 100);
+                let elHeight;
+
+                if (el.type === 'graphic' && el.image) {
+                    elHeight = elWidth * (el.image.height / el.image.width);
+                } else {
+                    elHeight = el.fontSize * 1.5;
+                }
+
+                // Simple bounding box hit test (ignoring rotation for simplicity)
+                const halfW = elWidth / 2;
+                const halfH = elHeight / 2;
+
+                if (canvasX >= cx - halfW && canvasX <= cx + halfW &&
+                    canvasY >= cy - halfH && canvasY <= cy + halfH) {
+                    return el;
+                }
+            }
+        }
+        return null;
+    }
+
+    function applyDragMove(coords) {
+        const dx = coords.x - draggingElement.startX;
+        const dy = coords.y - draggingElement.startY;
+        const rawX = draggingElement.origX + (dx / draggingElement.dims.width) * 100;
+        const rawY = draggingElement.origY + (dy / draggingElement.dims.height) * 100;
+
+        const clamped = {
+            x: Math.max(0, Math.min(100, rawX)),
+            y: Math.max(0, Math.min(100, rawY))
+        };
+        const snapped = snapToGuides(clamped.x, clamped.y);
+
+        const el = getElements().find(e => e.id === draggingElement.id);
+        if (el) {
+            el.x = snapped.x;
+            el.y = snapped.y;
+            updateCanvas();
+            drawSnapGuides();
+            updateElementProperties();
+        }
+    }
+
+    function clearDrag() {
+        if (draggingElement) {
+            draggingElement = null;
+            activeSnapGuides = { x: null, y: null };
+            canvasWrapper.classList.remove('element-dragging');
+            updateCanvas(); // redraw without guides
+        }
+    }
+
+    previewCanvas.addEventListener('mousedown', (e) => {
+        const coords = getCanvasCoords(e);
+        const hit = hitTestElements(coords.x, coords.y);
+        if (hit) {
+            e.preventDefault();
+            e.stopPropagation();
+            const dims = getCanvasDimensions();
+            draggingElement = {
+                id: hit.id,
+                startX: coords.x,
+                startY: coords.y,
+                origX: hit.x,
+                origY: hit.y,
+                dims: dims
+            };
+            selectedElementId = hit.id;
+            updateElementsList();
+            updateElementProperties();
+            canvasWrapper.classList.add('element-dragging');
+
+            // Switch to elements tab if not already there
+            const elementsTab = document.querySelector('.tab[data-tab="elements"]');
+            if (elementsTab && !elementsTab.classList.contains('active')) {
+                elementsTab.click();
+            }
+        }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!draggingElement) {
+            // Hover detection
+            const coords = getCanvasCoords(e);
+            const hit = hitTestElements(coords.x, coords.y);
+            canvasWrapper.classList.toggle('element-hover', !!hit);
+            return;
+        }
+        e.preventDefault();
+        applyDragMove(getCanvasCoords(e));
+    });
+
+    window.addEventListener('mouseup', () => clearDrag());
+
+    // Touch support
+    previewCanvas.addEventListener('touchstart', (e) => {
+        const coords = getCanvasCoords(e);
+        const hit = hitTestElements(coords.x, coords.y);
+        if (hit) {
+            e.preventDefault();
+            const dims = getCanvasDimensions();
+            draggingElement = {
+                id: hit.id,
+                startX: coords.x,
+                startY: coords.y,
+                origX: hit.x,
+                origY: hit.y,
+                dims: dims
+            };
+            selectedElementId = hit.id;
+            updateElementsList();
+            updateElementProperties();
+        }
+    }, { passive: false });
+
+    previewCanvas.addEventListener('touchmove', (e) => {
+        if (!draggingElement) return;
+        e.preventDefault();
+        applyDragMove(getCanvasCoords(e));
+    }, { passive: false });
+
+    previewCanvas.addEventListener('touchend', () => clearDrag());
+}
+
+// Draw snap guide lines over the canvas when dragging near center/middle
+function drawSnapGuides() {
+    if (!draggingElement) return;
+
+    const el = getSelectedElement();
+    if (!el) return;
+
+    const dims = getCanvasDimensions();
+    // Scale relative to canvas so guides stay visible in the scaled-down preview
+    const scale = dims.width / 400;
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(120, 170, 255, 0.45)';
+    ctx.lineWidth = Math.max(1, 1.5 * scale);
+    ctx.setLineDash([12 * scale, 8 * scale]);
+
+    // Vertical center line (x = 50%)
+    if (Math.abs(el.x - 50) < 0.01) {
+        const lineX = Math.round(dims.width * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(lineX, 0);
+        ctx.lineTo(lineX, dims.height);
+        ctx.stroke();
+    }
+
+    // Horizontal middle line (y = 50%)
+    if (Math.abs(el.y - 50) < 0.01) {
+        const lineY = Math.round(dims.height * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(0, lineY);
+        ctx.lineTo(dims.width, lineY);
+        ctx.stroke();
+    }
+
+    ctx.restore();
 }
 
 function setupEventListeners() {
@@ -4179,6 +4800,7 @@ function createNewScreenshot(img, src, name, lang, deviceType) {
         background: JSON.parse(JSON.stringify(state.defaults.background)),
         screenshot: JSON.parse(JSON.stringify(state.defaults.screenshot)),
         text: JSON.parse(JSON.stringify(state.defaults.text)),
+        elements: JSON.parse(JSON.stringify(state.defaults.elements || [])),
         // Legacy overrides for backwards compatibility
         overrides: {}
     });
@@ -4566,6 +5188,16 @@ function transferStyle(sourceIndex, targetIndex) {
     target.text.headlines = targetHeadlines;
     target.text.subheadlines = targetSubheadlines;
 
+    // Deep copy elements (reconstruct Image objects for graphics)
+    target.elements = (source.elements || []).map(el => {
+        const copy = JSON.parse(JSON.stringify({ ...el, image: undefined }));
+        if (el.type === 'graphic' && el.image) {
+            copy.image = el.image;
+        }
+        copy.id = crypto.randomUUID();
+        return copy;
+    });
+
     // Reset transfer mode
     state.transferTarget = null;
 
@@ -4614,6 +5246,16 @@ function applyStyleToAll() {
         // Restore original text content
         target.text.headlines = targetHeadlines;
         target.text.subheadlines = targetSubheadlines;
+
+        // Deep copy elements
+        target.elements = (source.elements || []).map(el => {
+            const copy = JSON.parse(JSON.stringify({ ...el, image: undefined }));
+            if (el.type === 'graphic' && el.image) {
+                copy.image = el.image;
+            }
+            copy.id = crypto.randomUUID();
+            return copy;
+        });
     });
 
     applyStyleSourceIndex = null;
@@ -4760,6 +5402,9 @@ function updateCanvas() {
         drawNoise();
     }
 
+    // Elements behind screenshot
+    drawElements(ctx, dims, 'behind-screenshot');
+
     // Draw screenshot (2D mode) or 3D phone model
     if (state.screenshots.length > 0) {
         const ss = getScreenshotSettings();
@@ -4776,8 +5421,14 @@ function updateCanvas() {
         }
     }
 
+    // Elements above screenshot but behind text
+    drawElements(ctx, dims, 'above-screenshot');
+
     // Draw text
     drawText();
+
+    // Elements above text
+    drawElements(ctx, dims, 'above-text');
 
     // Update side previews
     updateSidePreviews();
@@ -4995,6 +5646,11 @@ function renderScreenshotToCanvas(index, targetCanvas, targetCtx, dims, previewS
         drawNoiseToContext(targetCtx, dims, bg.noiseIntensity);
     }
 
+    const elements = screenshot.elements || [];
+
+    // Elements behind screenshot
+    drawElementsToContext(targetCtx, dims, elements, 'behind-screenshot');
+
     // Draw screenshot - 3D if active for this screenshot, otherwise 2D
     const settings = screenshot.screenshot;
     const use3D = settings.use3D || false;
@@ -5009,9 +5665,15 @@ function renderScreenshotToCanvas(index, targetCanvas, targetCtx, dims, previewS
         }
     }
 
+    // Elements above screenshot
+    drawElementsToContext(targetCtx, dims, elements, 'above-screenshot');
+
     // Draw text
     const txt = screenshot.text;
     drawTextToContext(targetCtx, dims, txt);
+
+    // Elements above text
+    drawElementsToContext(targetCtx, dims, elements, 'above-text');
 }
 
 function drawBackgroundToContext(context, dims, bg) {
@@ -5314,6 +5976,163 @@ function drawTextToContext(context, dims, txt) {
             context.textBaseline = 'bottom';
         }
     }
+}
+
+// Draw elements for the current screenshot at a specific layer
+function drawElements(context, dims, layer) {
+    const elements = getElements();
+    drawElementsToContext(context, dims, elements, layer);
+}
+
+// Draw elements to any context (for side previews and export)
+function drawElementsToContext(context, dims, elements, layer) {
+    const filtered = elements.filter(el => el.layer === layer);
+    filtered.forEach(el => {
+        context.save();
+        context.globalAlpha = el.opacity / 100;
+
+        const cx = dims.width * (el.x / 100);
+        const cy = dims.height * (el.y / 100);
+        const elWidth = dims.width * (el.width / 100);
+
+        context.translate(cx, cy);
+        if (el.rotation !== 0) {
+            context.rotate(el.rotation * Math.PI / 180);
+        }
+
+        if (el.type === 'graphic' && el.image) {
+            const aspect = el.image.height / el.image.width;
+            const elHeight = elWidth * aspect;
+            context.drawImage(el.image, -elWidth / 2, -elHeight / 2, elWidth, elHeight);
+        } else if (el.type === 'text' && el.text) {
+            const fontStyle = el.italic ? 'italic' : 'normal';
+            context.font = `${fontStyle} ${el.fontWeight} ${el.fontSize}px ${el.font}`;
+            context.fillStyle = el.fontColor;
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+
+            // Measure text for frame drawing
+            const lines = el.text.split('\n');
+            const lineHeight = el.fontSize * 1.2;
+            const totalHeight = lines.length * lineHeight;
+
+            // Draw frame behind text if enabled
+            if (el.frame && el.frame !== 'none') {
+                drawElementFrame(context, el, dims, elWidth, totalHeight);
+            }
+
+            // Draw text lines
+            const startY = -(totalHeight / 2) + lineHeight / 2;
+            lines.forEach((line, i) => {
+                context.fillText(line, 0, startY + i * lineHeight);
+            });
+        }
+
+        context.restore();
+    });
+}
+
+// Draw decorative frames around text elements
+function drawElementFrame(context, el, dims, textWidth, textHeight) {
+    const scale = el.frameScale / 100;
+    const padding = el.fontSize * 0.4 * scale;
+    const frameW = Math.max(textWidth, context.measureText(el.text).width) + padding * 2;
+    const frameH = textHeight + padding * 2;
+
+    context.save();
+    context.strokeStyle = el.frameColor;
+    context.fillStyle = 'none';
+    context.lineWidth = Math.max(2, el.fontSize * 0.04) * scale;
+
+    if (el.frame === 'laurel') {
+        drawLaurelWreath(context, frameW, frameH, scale, el.frameColor);
+    } else if (el.frame === 'laurel-star') {
+        drawLaurelWreath(context, frameW, frameH, scale, el.frameColor);
+        drawStar(context, 0, -frameH / 2 - el.fontSize * 0.15 * scale, el.fontSize * 0.3 * scale, el.frameColor);
+    } else if (el.frame === 'badge-circle') {
+        context.beginPath();
+        const radius = Math.max(frameW, frameH) / 2 + padding * 0.5;
+        context.arc(0, 0, radius, 0, Math.PI * 2);
+        context.stroke();
+    } else if (el.frame === 'badge-ribbon') {
+        // Shield shape
+        const sw = frameW + padding;
+        const sh = frameH + padding * 1.5;
+        context.beginPath();
+        context.moveTo(-sw / 2, -sh / 2);
+        context.lineTo(sw / 2, -sh / 2);
+        context.lineTo(sw / 2, sh / 2 - padding);
+        context.lineTo(0, sh / 2);
+        context.lineTo(-sw / 2, sh / 2 - padding);
+        context.closePath();
+        context.stroke();
+    }
+
+    context.restore();
+}
+
+// Draw laurel wreath branches
+function drawLaurelWreath(context, w, h, scale, color) {
+    context.save();
+    context.strokeStyle = color;
+    context.fillStyle = color;
+    context.lineWidth = Math.max(1, 2 * scale);
+
+    const branchH = h * 0.5;
+    const leaves = 6;
+
+    // Left branch
+    for (let i = 0; i < leaves; i++) {
+        const t = i / (leaves - 1);
+        const bx = -w / 2 - 5 * scale;
+        const by = branchH * (t - 0.5);
+        const leafSize = 8 * scale;
+        const angle = -0.4 + t * 0.8;
+
+        context.save();
+        context.translate(bx, by);
+        context.rotate(angle);
+        context.beginPath();
+        context.ellipse(0, 0, leafSize, leafSize * 0.4, 0, 0, Math.PI * 2);
+        context.fill();
+        context.restore();
+    }
+
+    // Right branch (mirrored)
+    for (let i = 0; i < leaves; i++) {
+        const t = i / (leaves - 1);
+        const bx = w / 2 + 5 * scale;
+        const by = branchH * (t - 0.5);
+        const leafSize = 8 * scale;
+        const angle = Math.PI + 0.4 - t * 0.8;
+
+        context.save();
+        context.translate(bx, by);
+        context.rotate(angle);
+        context.beginPath();
+        context.ellipse(0, 0, leafSize, leafSize * 0.4, 0, 0, Math.PI * 2);
+        context.fill();
+        context.restore();
+    }
+
+    context.restore();
+}
+
+// Draw a star shape
+function drawStar(context, cx, cy, size, color) {
+    context.save();
+    context.fillStyle = color;
+    context.beginPath();
+    for (let i = 0; i < 5; i++) {
+        const angle = (i * 4 * Math.PI / 5) - Math.PI / 2;
+        const x = cx + Math.cos(angle) * size;
+        const y = cy + Math.sin(angle) * size;
+        if (i === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+    }
+    context.closePath();
+    context.fill();
+    context.restore();
 }
 
 function drawBackground() {
