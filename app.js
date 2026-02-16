@@ -65,6 +65,17 @@ const state = {
             headlineUnderline: false,
             headlineStrikethrough: false,
             headlineColor: '#ffffff',
+            perLanguageLayout: false,
+            languageSettings: {
+                en: {
+                    headlineSize: 100,
+                    subheadlineSize: 50,
+                    position: 'top',
+                    offsetY: 12,
+                    lineHeight: 110
+                }
+            },
+            currentLayoutLang: 'en',
             position: 'top',
             offsetY: 12,
             lineHeight: 110,
@@ -85,6 +96,8 @@ const state = {
         popouts: []
     }
 };
+
+const baseTextDefaults = JSON.parse(JSON.stringify(state.defaults.text));
 
 // Runtime-only state (not persisted)
 let selectedElementId = null;
@@ -117,7 +130,76 @@ function getScreenshotSettings() {
 
 function getText() {
     const screenshot = getCurrentScreenshot();
-    return screenshot ? screenshot.text : state.defaults.text;
+    if (screenshot) {
+        screenshot.text = normalizeTextSettings(screenshot.text);
+        return screenshot.text;
+    }
+    state.defaults.text = normalizeTextSettings(state.defaults.text);
+    return state.defaults.text;
+}
+
+function getTextLayoutLanguage(text) {
+    if (text.currentLayoutLang) return text.currentLayoutLang;
+    if (text.headlineEnabled !== false) return text.currentHeadlineLang || 'en';
+    if (text.subheadlineEnabled) return text.currentSubheadlineLang || 'en';
+    return text.currentHeadlineLang || text.currentSubheadlineLang || 'en';
+}
+
+function getTextLanguageSettings(text, lang) {
+    if (!text.languageSettings) text.languageSettings = {};
+    if (!text.languageSettings[lang]) {
+        const sourceLang = text.currentLayoutLang || text.currentHeadlineLang || text.currentSubheadlineLang || 'en';
+        const sourceSettings = text.languageSettings[sourceLang];
+        text.languageSettings[lang] = {
+            headlineSize: sourceSettings ? sourceSettings.headlineSize : (text.headlineSize || 100),
+            subheadlineSize: sourceSettings ? sourceSettings.subheadlineSize : (text.subheadlineSize || 50),
+            position: sourceSettings ? sourceSettings.position : (text.position || 'top'),
+            offsetY: sourceSettings ? sourceSettings.offsetY : (typeof text.offsetY === 'number' ? text.offsetY : 12),
+            lineHeight: sourceSettings ? sourceSettings.lineHeight : (text.lineHeight || 110)
+        };
+    }
+    return text.languageSettings[lang];
+}
+
+function getEffectiveLayout(text, lang) {
+    if (!text.perLanguageLayout) {
+        return {
+            headlineSize: text.headlineSize || 100,
+            subheadlineSize: text.subheadlineSize || 50,
+            position: text.position || 'top',
+            offsetY: typeof text.offsetY === 'number' ? text.offsetY : 12,
+            lineHeight: text.lineHeight || 110
+        };
+    }
+    return getTextLanguageSettings(text, lang);
+}
+
+function normalizeTextSettings(text) {
+    const merged = JSON.parse(JSON.stringify(baseTextDefaults));
+    if (text) {
+        Object.assign(merged, text);
+        if (text.languageSettings) {
+            merged.languageSettings = JSON.parse(JSON.stringify(text.languageSettings));
+        }
+    }
+
+    merged.headlines = merged.headlines || { en: '' };
+    merged.headlineLanguages = merged.headlineLanguages || ['en'];
+    merged.currentHeadlineLang = merged.currentHeadlineLang || merged.headlineLanguages[0] || 'en';
+    merged.currentLayoutLang = merged.currentLayoutLang || merged.currentHeadlineLang || 'en';
+
+    merged.subheadlines = merged.subheadlines || { en: '' };
+    merged.subheadlineLanguages = merged.subheadlineLanguages || ['en'];
+    merged.currentSubheadlineLang = merged.currentSubheadlineLang || merged.subheadlineLanguages[0] || 'en';
+
+    if (!merged.languageSettings) merged.languageSettings = {};
+    const languages = new Set([...merged.headlineLanguages, ...merged.subheadlineLanguages]);
+    if (languages.size === 0) languages.add('en');
+    languages.forEach((lang) => {
+        getTextLanguageSettings(merged, lang);
+    });
+
+    return merged;
 }
 
 function getElements() {
@@ -1734,6 +1816,7 @@ function resetStateToDefaults() {
             }
         },
         text: {
+            headlineEnabled: true,
             headlines: { en: '' },
             headlineLanguages: ['en'],
             currentHeadlineLang: 'en',
@@ -1744,9 +1827,21 @@ function resetStateToDefaults() {
             headlineUnderline: false,
             headlineStrikethrough: false,
             headlineColor: '#ffffff',
+            perLanguageLayout: false,
+            languageSettings: {
+                en: {
+                    headlineSize: 100,
+                    subheadlineSize: 50,
+                    position: 'top',
+                    offsetY: 12,
+                    lineHeight: 110
+                }
+            },
+            currentLayoutLang: 'en',
             position: 'top',
             offsetY: 12,
             lineHeight: 110,
+            subheadlineEnabled: false,
             subheadlines: { en: '' },
             subheadlineLanguages: ['en'],
             currentSubheadlineLang: 'en',
@@ -2015,11 +2110,17 @@ function syncUIWithState() {
     document.getElementById('frame-opacity-value').textContent = formatValue(ss.frame.opacity) + '%';
 
     // Text
-    const currentHeadline = txt.headlines ? (txt.headlines[txt.currentHeadlineLang || 'en'] || '') : (txt.headline || '');
+    const headlineLang = txt.currentHeadlineLang || 'en';
+    const subheadlineLang = txt.currentSubheadlineLang || 'en';
+    const layoutLang = getTextLayoutLanguage(txt);
+    const headlineLayout = getEffectiveLayout(txt, headlineLang);
+    const subheadlineLayout = getEffectiveLayout(txt, subheadlineLang);
+    const layoutSettings = getEffectiveLayout(txt, layoutLang);
+    const currentHeadline = txt.headlines ? (txt.headlines[headlineLang] || '') : (txt.headline || '');
     document.getElementById('headline-text').value = currentHeadline;
     document.getElementById('headline-font').value = txt.headlineFont;
     updateFontPickerPreview();
-    document.getElementById('headline-size').value = txt.headlineSize;
+    document.getElementById('headline-size').value = headlineLayout.headlineSize;
     document.getElementById('headline-color').value = txt.headlineColor;
     document.getElementById('headline-weight').value = txt.headlineWeight;
     // Sync text style buttons
@@ -2029,16 +2130,16 @@ function syncUIWithState() {
         btn.classList.toggle('active', txt[key] || false);
     });
     document.querySelectorAll('#text-position button').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.position === txt.position);
+        btn.classList.toggle('active', btn.dataset.position === layoutSettings.position);
     });
-    document.getElementById('text-offset-y').value = txt.offsetY;
-    document.getElementById('text-offset-y-value').textContent = formatValue(txt.offsetY) + '%';
-    document.getElementById('line-height').value = txt.lineHeight;
-    document.getElementById('line-height-value').textContent = formatValue(txt.lineHeight) + '%';
-    const currentSubheadline = txt.subheadlines ? (txt.subheadlines[txt.currentSubheadlineLang || 'en'] || '') : (txt.subheadline || '');
+    document.getElementById('text-offset-y').value = layoutSettings.offsetY;
+    document.getElementById('text-offset-y-value').textContent = formatValue(layoutSettings.offsetY) + '%';
+    document.getElementById('line-height').value = layoutSettings.lineHeight;
+    document.getElementById('line-height-value').textContent = formatValue(layoutSettings.lineHeight) + '%';
+    const currentSubheadline = txt.subheadlines ? (txt.subheadlines[subheadlineLang] || '') : (txt.subheadline || '');
     document.getElementById('subheadline-text').value = currentSubheadline;
     document.getElementById('subheadline-font').value = txt.subheadlineFont || txt.headlineFont;
-    document.getElementById('subheadline-size').value = txt.subheadlineSize;
+    document.getElementById('subheadline-size').value = subheadlineLayout.subheadlineSize;
     document.getElementById('subheadline-color').value = txt.subheadlineColor;
     document.getElementById('subheadline-opacity').value = txt.subheadlineOpacity;
     document.getElementById('subheadline-opacity-value').textContent = formatValue(txt.subheadlineOpacity) + '%';
@@ -2049,6 +2150,9 @@ function syncUIWithState() {
         const key = 'subheadline' + style.charAt(0).toUpperCase() + style.slice(1);
         btn.classList.toggle('active', txt[key] || false);
     });
+
+    // Per-language layout toggle
+    document.getElementById('per-language-layout-toggle').classList.toggle('active', txt.perLanguageLayout || false);
 
     // Headline/Subheadline toggles
     const headlineEnabled = txt.headlineEnabled !== false; // default true for backwards compatibility
@@ -4153,6 +4257,29 @@ function setupEventListeners() {
         updateCanvas();
     });
 
+    // Per-language layout toggle
+    document.getElementById('per-language-layout-toggle').addEventListener('click', function () {
+        this.classList.toggle('active');
+        const enabled = this.classList.contains('active');
+        const text = getTextSettings();
+        if (enabled && !text.perLanguageLayout) {
+            // Seed all language settings from current global values
+            const languages = new Set([...(text.headlineLanguages || ['en']), ...(text.subheadlineLanguages || ['en'])]);
+            if (!text.languageSettings) text.languageSettings = {};
+            languages.forEach(lang => {
+                text.languageSettings[lang] = {
+                    headlineSize: text.headlineSize || 100,
+                    subheadlineSize: text.subheadlineSize || 50,
+                    position: text.position || 'top',
+                    offsetY: typeof text.offsetY === 'number' ? text.offsetY : 12,
+                    lineHeight: text.lineHeight || 110
+                };
+            });
+        }
+        text.perLanguageLayout = enabled;
+        updateCanvas();
+    });
+
     // Headline toggle
     document.getElementById('headline-toggle').addEventListener('click', function () {
         this.classList.toggle('active');
@@ -4196,7 +4323,9 @@ function setupEventListeners() {
     // Font picker is initialized separately via initFontPicker()
 
     document.getElementById('headline-size').addEventListener('input', (e) => {
-        setTextValue('headlineSize', parseInt(e.target.value) || 100);
+        const text = getTextSettings();
+        const lang = text.currentHeadlineLang || 'en';
+        setTextLanguageValue('headlineSize', parseInt(e.target.value) || 100, lang);
         updateCanvas();
     });
 
@@ -4227,19 +4356,19 @@ function setupEventListeners() {
         btn.addEventListener('click', () => {
             document.querySelectorAll('#text-position button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            setTextValue('position', btn.dataset.position);
+            setTextLanguageValue('position', btn.dataset.position);
             updateCanvas();
         });
     });
 
     document.getElementById('text-offset-y').addEventListener('input', (e) => {
-        setTextValue('offsetY', parseInt(e.target.value));
+        setTextLanguageValue('offsetY', parseInt(e.target.value));
         document.getElementById('text-offset-y-value').textContent = formatValue(e.target.value) + '%';
         updateCanvas();
     });
 
     document.getElementById('line-height').addEventListener('input', (e) => {
-        setTextValue('lineHeight', parseInt(e.target.value));
+        setTextLanguageValue('lineHeight', parseInt(e.target.value));
         document.getElementById('line-height-value').textContent = formatValue(e.target.value) + '%';
         updateCanvas();
     });
@@ -4252,7 +4381,9 @@ function setupEventListeners() {
     });
 
     document.getElementById('subheadline-size').addEventListener('input', (e) => {
-        setTextValue('subheadlineSize', parseInt(e.target.value) || 50);
+        const text = getTextSettings();
+        const lang = text.currentSubheadlineLang || 'en';
+        setTextLanguageValue('subheadlineSize', parseInt(e.target.value) || 50, lang);
         updateCanvas();
     });
 
@@ -4640,18 +4771,20 @@ function removeSubheadlineLanguage(lang) {
 function switchHeadlineLanguage(lang) {
     const text = getTextSettings();
     text.currentHeadlineLang = lang;
+    text.currentLayoutLang = lang;
 
-    // Load text for this language
-    document.getElementById('headline-text').value = text.headlines[lang] || '';
+    // Sync text inputs and layout controls for this language
+    updateTextUI(text);
     updateCanvas();
 }
 
 function switchSubheadlineLanguage(lang) {
     const text = getTextSettings();
     text.currentSubheadlineLang = lang;
+    text.currentLayoutLang = lang;
 
-    // Load text for this language
-    document.getElementById('subheadline-text').value = text.subheadlines[lang] || '';
+    // Sync text inputs and layout controls for this language
+    updateTextUI(text);
     updateCanvas();
 }
 
@@ -5528,6 +5661,19 @@ function setTextValue(key, value) {
     setTextSetting(key, value);
 }
 
+function setTextLanguageValue(key, value, lang = null) {
+    const text = getTextSettings();
+    if (!text.perLanguageLayout) {
+        // Global mode - write directly to text
+        text[key] = value;
+        return;
+    }
+    const targetLang = lang || getTextLayoutLanguage(text);
+    const settings = getTextLanguageSettings(text, targetLang);
+    settings[key] = value;
+    text.currentLayoutLang = targetLang;
+}
+
 // Helper function to get text settings for current screenshot
 function getTextSettings() {
     return getText();
@@ -5545,10 +5691,19 @@ function loadTextUIFromGlobal() {
 
 // Update all text UI elements
 function updateTextUI(text) {
-    document.getElementById('headline-text').value = text.headline || '';
+    const headlineLang = text.currentHeadlineLang || 'en';
+    const subheadlineLang = text.currentSubheadlineLang || 'en';
+    const layoutLang = getTextLayoutLanguage(text);
+    const headlineLayout = getEffectiveLayout(text, headlineLang);
+    const subheadlineLayout = getEffectiveLayout(text, subheadlineLang);
+    const layoutSettings = getEffectiveLayout(text, layoutLang);
+    const headlineText = text.headlines ? (text.headlines[headlineLang] || '') : (text.headline || '');
+    const subheadlineText = text.subheadlines ? (text.subheadlines[subheadlineLang] || '') : (text.subheadline || '');
+
+    document.getElementById('headline-text').value = headlineText;
     document.getElementById('headline-font').value = text.headlineFont;
     updateFontPickerPreview();
-    document.getElementById('headline-size').value = text.headlineSize;
+    document.getElementById('headline-size').value = headlineLayout.headlineSize;
     document.getElementById('headline-color').value = text.headlineColor;
     document.getElementById('headline-weight').value = text.headlineWeight;
     // Sync text style buttons
@@ -5558,15 +5713,15 @@ function updateTextUI(text) {
         btn.classList.toggle('active', text[key] || false);
     });
     document.querySelectorAll('#text-position button').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.position === text.position);
+        btn.classList.toggle('active', btn.dataset.position === layoutSettings.position);
     });
-    document.getElementById('text-offset-y').value = text.offsetY;
-    document.getElementById('text-offset-y-value').textContent = formatValue(text.offsetY) + '%';
-    document.getElementById('line-height').value = text.lineHeight;
-    document.getElementById('line-height-value').textContent = formatValue(text.lineHeight) + '%';
-    document.getElementById('subheadline-text').value = text.subheadline || '';
+    document.getElementById('text-offset-y').value = layoutSettings.offsetY;
+    document.getElementById('text-offset-y-value').textContent = formatValue(layoutSettings.offsetY) + '%';
+    document.getElementById('line-height').value = layoutSettings.lineHeight;
+    document.getElementById('line-height-value').textContent = formatValue(layoutSettings.lineHeight) + '%';
+    document.getElementById('subheadline-text').value = subheadlineText;
     document.getElementById('subheadline-font').value = text.subheadlineFont || text.headlineFont;
-    document.getElementById('subheadline-size').value = text.subheadlineSize;
+    document.getElementById('subheadline-size').value = subheadlineLayout.subheadlineSize;
     document.getElementById('subheadline-color').value = text.subheadlineColor;
     document.getElementById('subheadline-opacity').value = text.subheadlineOpacity;
     document.getElementById('subheadline-opacity-value').textContent = formatValue(text.subheadlineOpacity) + '%';
@@ -5796,6 +5951,9 @@ function createNewScreenshot(img, src, name, lang, deviceType) {
         addProjectLanguage(lang);
     }
 
+    const textDefaults = normalizeTextSettings(state.defaults.text);
+    state.defaults.text = textDefaults;
+
     // Each screenshot gets its own copy of all settings from defaults
     state.screenshots.push({
         image: img || null, // Keep for legacy compatibility
@@ -5804,7 +5962,7 @@ function createNewScreenshot(img, src, name, lang, deviceType) {
         localizedImages: localizedImages,
         background: JSON.parse(JSON.stringify(state.defaults.background)),
         screenshot: JSON.parse(JSON.stringify(state.defaults.screenshot)),
-        text: JSON.parse(JSON.stringify(state.defaults.text)),
+        text: JSON.parse(JSON.stringify(textDefaults)),
         elements: JSON.parse(JSON.stringify(state.defaults.elements || [])),
         popouts: [],
         // Legacy overrides for backwards compatibility
@@ -6890,32 +7048,39 @@ function drawTextToContext(context, dims, txt) {
     const headlineEnabled = txt.headlineEnabled !== false;
     const subheadlineEnabled = txt.subheadlineEnabled || false;
 
-    const headline = headlineEnabled && txt.headlines ? (txt.headlines[txt.currentHeadlineLang || 'en'] || '') : '';
-    const subheadline = subheadlineEnabled && txt.subheadlines ? (txt.subheadlines[txt.currentSubheadlineLang || 'en'] || '') : '';
+    const headlineLang = txt.currentHeadlineLang || 'en';
+    const subheadlineLang = txt.currentSubheadlineLang || 'en';
+    const layoutLang = getTextLayoutLanguage(txt);
+    const headlineLayout = getEffectiveLayout(txt, headlineLang);
+    const subheadlineLayout = getEffectiveLayout(txt, subheadlineLang);
+    const layoutSettings = getEffectiveLayout(txt, layoutLang);
+
+    const headline = headlineEnabled && txt.headlines ? (txt.headlines[headlineLang] || '') : '';
+    const subheadline = subheadlineEnabled && txt.subheadlines ? (txt.subheadlines[subheadlineLang] || '') : '';
 
     if (!headline && !subheadline) return;
 
     const padding = dims.width * 0.08;
-    const textY = txt.position === 'top'
-        ? dims.height * (txt.offsetY / 100)
-        : dims.height * (1 - txt.offsetY / 100);
+    const textY = layoutSettings.position === 'top'
+        ? dims.height * (layoutSettings.offsetY / 100)
+        : dims.height * (1 - layoutSettings.offsetY / 100);
 
     context.textAlign = 'center';
-    context.textBaseline = txt.position === 'top' ? 'top' : 'bottom';
+    context.textBaseline = layoutSettings.position === 'top' ? 'top' : 'bottom';
 
     let currentY = textY;
 
     // Draw headline
     if (headline) {
         const fontStyle = txt.headlineItalic ? 'italic' : 'normal';
-        context.font = `${fontStyle} ${txt.headlineWeight} ${txt.headlineSize}px ${txt.headlineFont}`;
+        context.font = `${fontStyle} ${txt.headlineWeight} ${headlineLayout.headlineSize}px ${txt.headlineFont}`;
         context.fillStyle = txt.headlineColor;
 
         const lines = wrapText(context, headline, dims.width - padding * 2);
-        const lineHeight = txt.headlineSize * (txt.lineHeight / 100);
+        const lineHeight = headlineLayout.headlineSize * (layoutSettings.lineHeight / 100);
 
         // For bottom positioning, offset currentY so lines draw correctly
-        if (txt.position === 'bottom') {
+        if (layoutSettings.position === 'bottom') {
             currentY -= (lines.length - 1) * lineHeight;
         }
 
@@ -6927,13 +7092,13 @@ function drawTextToContext(context, dims, txt) {
 
             // Calculate text metrics for decorations
             const textWidth = context.measureText(line).width;
-            const fontSize = txt.headlineSize;
+            const fontSize = headlineLayout.headlineSize;
             const lineThickness = Math.max(2, fontSize * 0.05);
             const x = dims.width / 2 - textWidth / 2;
 
             // Draw underline
             if (txt.headlineUnderline) {
-                const underlineY = txt.position === 'top'
+                const underlineY = layoutSettings.position === 'top'
                     ? y + fontSize * 0.9
                     : y + fontSize * 0.1;
                 context.fillRect(x, underlineY, textWidth, lineThickness);
@@ -6941,7 +7106,7 @@ function drawTextToContext(context, dims, txt) {
 
             // Draw strikethrough
             if (txt.headlineStrikethrough) {
-                const strikeY = txt.position === 'top'
+                const strikeY = layoutSettings.position === 'top'
                     ? y + fontSize * 0.4
                     : y - fontSize * 0.4;
                 context.fillRect(x, strikeY, textWidth, lineThickness);
@@ -6951,10 +7116,10 @@ function drawTextToContext(context, dims, txt) {
         // Track where subheadline should start (below the bottom edge of headline)
         // The gap between headline and subheadline should be (lineHeight - fontSize)
         // This is the "extra" spacing beyond the text itself
-        const gap = lineHeight - txt.headlineSize;
-        if (txt.position === 'top') {
+        const gap = lineHeight - headlineLayout.headlineSize;
+        if (layoutSettings.position === 'top') {
             // For top: lastLineY is top of last line, add fontSize to get bottom, then add gap
-            currentY = lastLineY + txt.headlineSize + gap;
+            currentY = lastLineY + headlineLayout.headlineSize + gap;
         } else {
             // For bottom: lastLineY is already the bottom of last line, just add gap
             currentY = lastLineY + gap;
@@ -6965,16 +7130,16 @@ function drawTextToContext(context, dims, txt) {
     if (subheadline) {
         const subFontStyle = txt.subheadlineItalic ? 'italic' : 'normal';
         const subWeight = txt.subheadlineWeight || '400';
-        context.font = `${subFontStyle} ${subWeight} ${txt.subheadlineSize}px ${txt.subheadlineFont || txt.headlineFont}`;
+        context.font = `${subFontStyle} ${subWeight} ${subheadlineLayout.subheadlineSize}px ${txt.subheadlineFont || txt.headlineFont}`;
         context.fillStyle = hexToRgba(txt.subheadlineColor, txt.subheadlineOpacity / 100);
 
         const lines = wrapText(context, subheadline, dims.width - padding * 2);
-        const subLineHeight = txt.subheadlineSize * 1.4;
+        const subLineHeight = subheadlineLayout.subheadlineSize * 1.4;
 
         // Subheadline starts after headline with gap determined by headline lineHeight
         // For bottom position, switch to 'top' baseline so subheadline draws downward
         const subY = currentY;
-        if (txt.position === 'bottom') {
+        if (layoutSettings.position === 'bottom') {
             context.textBaseline = 'top';
         }
 
@@ -6984,7 +7149,7 @@ function drawTextToContext(context, dims, txt) {
 
             // Calculate text metrics for decorations
             const textWidth = context.measureText(line).width;
-            const fontSize = txt.subheadlineSize;
+            const fontSize = subheadlineLayout.subheadlineSize;
             const lineThickness = Math.max(2, fontSize * 0.05);
             const x = dims.width / 2 - textWidth / 2;
 
@@ -7002,7 +7167,7 @@ function drawTextToContext(context, dims, txt) {
         });
 
         // Restore baseline if we changed it
-        if (txt.position === 'bottom') {
+        if (layoutSettings.position === 'bottom') {
             context.textBaseline = 'bottom';
         }
     }
@@ -7069,8 +7234,8 @@ function drawElementsToContext(context, dims, elements, layer) {
             context.textAlign = 'center';
             context.textBaseline = 'middle';
 
-            // Measure text for frame drawing
-            const lines = el.text.split('\n');
+            // Word-wrap text within element width (respects manual line breaks)
+            const lines = wrapText(context, el.text, elWidth);
             const lineHeight = el.fontSize * 1.05;
             const totalHeight = (lines.length - 1) * lineHeight + el.fontSize;
 
@@ -7181,8 +7346,9 @@ function drawPopoutsToContext(context, dims, popouts, img, screenshotSettings) {
 function drawElementFrame(context, el, dims, textWidth, textHeight) {
     const scale = el.frameScale / 100;
     const padding = el.fontSize * 0.4 * scale;
-    // Measure the widest line rather than the full string or element width
-    const lines = el.text.split('\n');
+    // Measure the widest line (using wrapText to match rendering)
+    const elWidth = dims.width * (el.width / 100);
+    const lines = wrapText(context, el.text, elWidth);
     const maxLineW = Math.max(...lines.map(l => context.measureText(l).width));
     const frameW = maxLineW + padding * 2;
     const frameH = textHeight + padding * 2;
@@ -7471,32 +7637,39 @@ function drawText() {
     const headlineEnabled = text.headlineEnabled !== false;
     const subheadlineEnabled = text.subheadlineEnabled || false;
 
+    const headlineLang = text.currentHeadlineLang || 'en';
+    const subheadlineLang = text.currentSubheadlineLang || 'en';
+    const layoutLang = getTextLayoutLanguage(text);
+    const headlineLayout = getEffectiveLayout(text, headlineLang);
+    const subheadlineLayout = getEffectiveLayout(text, subheadlineLang);
+    const layoutSettings = getEffectiveLayout(text, layoutLang);
+
     // Get current language text (only if enabled)
-    const headline = headlineEnabled && text.headlines ? (text.headlines[text.currentHeadlineLang || 'en'] || '') : '';
-    const subheadline = subheadlineEnabled && text.subheadlines ? (text.subheadlines[text.currentSubheadlineLang || 'en'] || '') : '';
+    const headline = headlineEnabled && text.headlines ? (text.headlines[headlineLang] || '') : '';
+    const subheadline = subheadlineEnabled && text.subheadlines ? (text.subheadlines[subheadlineLang] || '') : '';
 
     if (!headline && !subheadline) return;
 
     const padding = dims.width * 0.08;
-    const textY = text.position === 'top'
-        ? dims.height * (text.offsetY / 100)
-        : dims.height * (1 - text.offsetY / 100);
+    const textY = layoutSettings.position === 'top'
+        ? dims.height * (layoutSettings.offsetY / 100)
+        : dims.height * (1 - layoutSettings.offsetY / 100);
 
     ctx.textAlign = 'center';
-    ctx.textBaseline = text.position === 'top' ? 'top' : 'bottom';
+    ctx.textBaseline = layoutSettings.position === 'top' ? 'top' : 'bottom';
 
     let currentY = textY;
 
     // Draw headline
     if (headline) {
         const fontStyle = text.headlineItalic ? 'italic' : 'normal';
-        ctx.font = `${fontStyle} ${text.headlineWeight} ${text.headlineSize}px ${text.headlineFont}`;
+        ctx.font = `${fontStyle} ${text.headlineWeight} ${headlineLayout.headlineSize}px ${text.headlineFont}`;
         ctx.fillStyle = text.headlineColor;
 
         const lines = wrapText(ctx, headline, dims.width - padding * 2);
-        const lineHeight = text.headlineSize * (text.lineHeight / 100);
+        const lineHeight = headlineLayout.headlineSize * (layoutSettings.lineHeight / 100);
 
-        if (text.position === 'bottom') {
+        if (layoutSettings.position === 'bottom') {
             currentY -= (lines.length - 1) * lineHeight;
         }
 
@@ -7509,13 +7682,13 @@ function drawText() {
             // Calculate text metrics for decorations
             // When textBaseline is 'top', y is at top of text; when 'bottom', y is at bottom
             const textWidth = ctx.measureText(line).width;
-            const fontSize = text.headlineSize;
+            const fontSize = headlineLayout.headlineSize;
             const lineThickness = Math.max(2, fontSize * 0.05);
             const x = dims.width / 2 - textWidth / 2;
 
             // Draw underline
             if (text.headlineUnderline) {
-                const underlineY = text.position === 'top'
+                const underlineY = layoutSettings.position === 'top'
                     ? y + fontSize * 0.9  // Below text when baseline is top
                     : y + fontSize * 0.1; // Below text when baseline is bottom
                 ctx.fillRect(x, underlineY, textWidth, lineThickness);
@@ -7523,7 +7696,7 @@ function drawText() {
 
             // Draw strikethrough
             if (text.headlineStrikethrough) {
-                const strikeY = text.position === 'top'
+                const strikeY = layoutSettings.position === 'top'
                     ? y + fontSize * 0.4  // Middle of text when baseline is top
                     : y - fontSize * 0.4; // Middle of text when baseline is bottom
                 ctx.fillRect(x, strikeY, textWidth, lineThickness);
@@ -7533,10 +7706,10 @@ function drawText() {
         // Track where subheadline should start (below the bottom edge of headline)
         // The gap between headline and subheadline should be (lineHeight - fontSize)
         // This is the "extra" spacing beyond the text itself
-        const gap = lineHeight - text.headlineSize;
-        if (text.position === 'top') {
+        const gap = lineHeight - headlineLayout.headlineSize;
+        if (layoutSettings.position === 'top') {
             // For top: lastLineY is top of last line, add fontSize to get bottom, then add gap
-            currentY = lastLineY + text.headlineSize + gap;
+            currentY = lastLineY + headlineLayout.headlineSize + gap;
         } else {
             // For bottom: lastLineY is already the bottom of last line, just add gap
             currentY = lastLineY + gap;
@@ -7547,16 +7720,16 @@ function drawText() {
     if (subheadline) {
         const subFontStyle = text.subheadlineItalic ? 'italic' : 'normal';
         const subWeight = text.subheadlineWeight || '400';
-        ctx.font = `${subFontStyle} ${subWeight} ${text.subheadlineSize}px ${text.subheadlineFont || text.headlineFont}`;
+        ctx.font = `${subFontStyle} ${subWeight} ${subheadlineLayout.subheadlineSize}px ${text.subheadlineFont || text.headlineFont}`;
         ctx.fillStyle = hexToRgba(text.subheadlineColor, text.subheadlineOpacity / 100);
 
         const lines = wrapText(ctx, subheadline, dims.width - padding * 2);
-        const subLineHeight = text.subheadlineSize * 1.4;
+        const subLineHeight = subheadlineLayout.subheadlineSize * 1.4;
 
         // Subheadline starts after headline with gap determined by headline lineHeight
         // For bottom position, switch to 'top' baseline so subheadline draws downward
         const subY = currentY;
-        if (text.position === 'bottom') {
+        if (layoutSettings.position === 'bottom') {
             ctx.textBaseline = 'top';
         }
 
@@ -7566,7 +7739,7 @@ function drawText() {
 
             // Calculate text metrics for decorations
             const textWidth = ctx.measureText(line).width;
-            const fontSize = text.subheadlineSize;
+            const fontSize = subheadlineLayout.subheadlineSize;
             const lineThickness = Math.max(2, fontSize * 0.05);
             const x = dims.width / 2 - textWidth / 2;
 
@@ -7584,7 +7757,7 @@ function drawText() {
         });
 
         // Restore baseline if we changed it
-        if (text.position === 'bottom') {
+        if (layoutSettings.position === 'bottom') {
             ctx.textBaseline = 'bottom';
         }
     }
