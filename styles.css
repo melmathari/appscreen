@@ -188,6 +188,12 @@ html.tauri-app .right-sidebar {
 .sidebar-right {
     border-right: none;
     border-left: 1px solid var(--border-color);
+    transition: opacity 0.3s ease;
+}
+
+.sidebar-right.disabled {
+    opacity: 0.4;
+    pointer-events: none;
 }
 
 .sidebar-right .sidebar-header {
@@ -951,12 +957,14 @@ input[type="range"]::-webkit-slider-thumb {
     width: 80px;
     height: 80px;
     margin-bottom: 16px;
+    color: var(--text-primary);
     opacity: 0.3;
 }
 
 .no-screenshot p {
     font-size: 16px;
-    opacity: 0.8;
+    color: var(--text-primary);
+    opacity: 0.6;
 }
 
 /* Export and Output Size Section */

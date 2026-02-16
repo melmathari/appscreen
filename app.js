@@ -4825,7 +4825,16 @@ let draggedScreenshotIndex = null;
 
 function updateScreenshotList() {
     screenshotList.innerHTML = '';
-    noScreenshot.style.display = state.screenshots.length === 0 ? 'block' : 'none';
+    const isEmpty = state.screenshots.length === 0;
+    noScreenshot.style.display = isEmpty ? 'block' : 'none';
+
+    // Disable right sidebar and export buttons when no screenshots
+    const rightSidebar = document.querySelector('.sidebar-right');
+    if (rightSidebar) rightSidebar.classList.toggle('disabled', isEmpty);
+    const exportCurrent = document.getElementById('export-current');
+    const exportAll = document.getElementById('export-all');
+    if (exportCurrent) { exportCurrent.disabled = isEmpty; exportCurrent.style.opacity = isEmpty ? '0.4' : ''; exportCurrent.style.pointerEvents = isEmpty ? 'none' : ''; }
+    if (exportAll) { exportAll.disabled = isEmpty; exportAll.style.opacity = isEmpty ? '0.4' : ''; exportAll.style.pointerEvents = isEmpty ? 'none' : ''; }
 
     // Show transfer mode hint if active
     if (state.transferTarget !== null && state.screenshots.length > 1) {
