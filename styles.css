@@ -148,6 +148,36 @@ html.tauri-app .right-sidebar {
     padding-bottom: 0;
 }
 
+.sidebar-add-buttons {
+    flex-shrink: 0;
+    display: flex;
+    gap: 8px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.add-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.add-btn:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    background: rgba(59, 130, 246, 0.05);
+}
+
 .sidebar-footer {
     flex-shrink: 0;
     padding: 16px 20px 20px;
@@ -252,14 +282,12 @@ html.tauri-app .right-sidebar {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    border-radius: 8px;
-    border: 2px dashed transparent;
-    transition: all 0.2s;
 }
 
-.screenshot-list.drop-active {
-    border-color: var(--accent);
+.sidebar-content.drop-active {
+    border: 2px dashed var(--accent);
     background: rgba(99, 102, 241, 0.1);
+    border-radius: 8px;
 }
 
 .screenshot-item {

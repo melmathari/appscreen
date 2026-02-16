@@ -1754,27 +1754,41 @@ function setupEventListeners() {
         });
     });
 
-    // File upload (upload zone is now in screenshot list, created dynamically in updateScreenshotList)
+    // File upload
     fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 
-    // Make entire screenshot list a drop zone
-    screenshotList.addEventListener('dragover', (e) => {
+    // Add screenshots button
+    document.getElementById('add-screenshots-btn').addEventListener('click', () => fileInput.click());
+
+    // Add blank screen button
+    document.getElementById('add-blank-btn').addEventListener('click', () => {
+        createNewScreenshot(null, null, 'Blank Screen', null, state.outputDevice);
+        state.selectedIndex = state.screenshots.length - 1;
+        updateScreenshotList();
+        syncUIWithState();
+        updateGradientStopsUI();
+        updateCanvas();
+    });
+
+    // Make the entire sidebar content area a drop zone
+    const sidebarContent = screenshotList.closest('.sidebar-content');
+    sidebarContent.addEventListener('dragover', (e) => {
         // Only handle file drops, not internal screenshot reordering
         if (e.dataTransfer.types.includes('Files')) {
             e.preventDefault();
-            screenshotList.classList.add('drop-active');
+            sidebarContent.classList.add('drop-active');
         }
     });
-    screenshotList.addEventListener('dragleave', (e) => {
-        // Only remove class if leaving the list entirely
-        if (!screenshotList.contains(e.relatedTarget)) {
-            screenshotList.classList.remove('drop-active');
+    sidebarContent.addEventListener('dragleave', (e) => {
+        // Only remove class if leaving the area entirely
+        if (!sidebarContent.contains(e.relatedTarget)) {
+            sidebarContent.classList.remove('drop-active');
         }
     });
-    screenshotList.addEventListener('drop', (e) => {
+    sidebarContent.addEventListener('drop', (e) => {
         if (e.dataTransfer.types.includes('Files')) {
             e.preventDefault();
-            screenshotList.classList.remove('drop-active');
+            sidebarContent.classList.remove('drop-active');
             handleFiles(e.dataTransfer.files);
         }
     });
@@ -4341,7 +4355,7 @@ function updateScreenshotList() {
                     item.classList.add('drag-insert-before');
                 } else if (isAbove && index > 0) {
                     // Dropping before this item = after the previous item
-                    const items = screenshotList.querySelectorAll('.screenshot-item:not(.upload-item)');
+                    const items = screenshotList.querySelectorAll('.screenshot-item');
                     const prevItem = items[index - 1];
                     if (prevItem && !prevItem.classList.contains('dragging')) {
                         prevItem.classList.add('drag-insert-after');
@@ -4509,48 +4523,10 @@ function updateScreenshotList() {
         screenshotList.appendChild(item);
     });
 
-    // Add upload zone as last item in the list (unless in transfer mode)
-    if (state.transferTarget === null) {
-        const uploadItem = document.createElement('div');
-        uploadItem.className = 'screenshot-item upload-item';
-        uploadItem.id = 'upload-zone';
-        uploadItem.innerHTML = `
-            <div class="upload-item-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M12 5v14M5 12h14"/>
-                </svg>
-            </div>
-            <div class="screenshot-info">
-                <div class="screenshot-name">Add Screenshots</div>
-                <div class="screenshot-device">Drop or click to browse</div>
-            </div>
-        `;
-        uploadItem.addEventListener('click', () => fileInput.click());
-        screenshotList.appendChild(uploadItem);
-
-        // Add blank screen button
-        const blankItem = document.createElement('div');
-        blankItem.className = 'screenshot-item upload-item';
-        blankItem.innerHTML = `
-            <div class="upload-item-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                </svg>
-            </div>
-            <div class="screenshot-info">
-                <div class="screenshot-name">Add Blank Screen</div>
-                <div class="screenshot-device">No screenshot image</div>
-            </div>
-        `;
-        blankItem.addEventListener('click', () => {
-            createNewScreenshot(null, null, 'Blank Screen', null, state.outputDevice);
-            state.selectedIndex = state.screenshots.length - 1;
-            updateScreenshotList();
-            syncUIWithState();
-            updateGradientStopsUI();
-            updateCanvas();
-        });
-        screenshotList.appendChild(blankItem);
+    // Hide add buttons during transfer mode
+    const addButtonsContainer = document.querySelector('.sidebar-add-buttons');
+    if (addButtonsContainer) {
+        addButtonsContainer.style.display = state.transferTarget === null ? '' : 'none';
     }
 
     // Update project selector to reflect current screenshot count
