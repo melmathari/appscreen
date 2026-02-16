@@ -5696,9 +5696,11 @@ function updateCanvas() {
 
     // Draw screenshot (2D mode) or 3D phone model
     if (state.screenshots.length > 0) {
+        const screenshot = state.screenshots[state.selectedIndex];
+        const img = screenshot ? getScreenshotImage(screenshot) : null;
         const ss = getScreenshotSettings();
         const use3D = ss.use3D || false;
-        if (use3D && typeof renderThreeJSToCanvas === 'function' && phoneModelLoaded) {
+        if (use3D && img && typeof renderThreeJSToCanvas === 'function' && phoneModelLoaded) {
             // In 3D mode, update the screen texture and render the phone model
             if (typeof updateScreenTexture === 'function') {
                 updateScreenTexture();
