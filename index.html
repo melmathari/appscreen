@@ -1186,19 +1186,48 @@
                         <div class="divider"></div>
                         <div class="control-group">
                             <label class="control-label">Text</label>
-                            <textarea id="element-text-input" rows="2" placeholder="Enter text"></textarea>
-                        </div>
-
-                        <div class="control-group">
-                            <label class="control-label">Font Size</label>
-                            <div class="control-row">
-                                <input type="range" id="element-font-size" min="12" max="300" value="60">
-                                <span class="range-value" id="element-font-size-value">60</span>
+                            <div class="textarea-with-button">
+                                <textarea id="element-text-input" rows="2" placeholder="Enter text"></textarea>
+                                <button class="magic-translate-btn" id="translate-element-btn" title="Translate to all languages">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2v3M22 22l-5-10-5 10M14 18h6"/>
+                                    </svg>
+                                </button>
                             </div>
                         </div>
 
                         <div class="control-group">
+                            <label class="control-label">Font</label>
+                            <div class="font-picker" id="element-font-picker">
+                                <button class="font-picker-trigger" id="element-font-picker-trigger">
+                                    <span class="font-picker-preview" id="element-font-picker-preview">SF Pro Display</span>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="6 9 12 15 18 9"/>
+                                    </svg>
+                                </button>
+                                <div class="font-picker-dropdown" id="element-font-picker-dropdown">
+                                    <div class="font-picker-search">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="11" cy="11" r="8"/>
+                                            <path d="M21 21l-4.35-4.35"/>
+                                        </svg>
+                                        <input type="text" id="element-font-search" placeholder="Search fonts..." autocomplete="off">
+                                    </div>
+                                    <div class="font-picker-categories">
+                                        <button class="font-category active" data-category="popular">Popular</button>
+                                        <button class="font-category" data-category="system">System</button>
+                                        <button class="font-category" data-category="all">All</button>
+                                    </div>
+                                    <div class="font-picker-list" id="element-font-picker-list">
+                                    </div>
+                                </div>
+                            </div>
+                            <input type="hidden" id="element-font" value="-apple-system, BlinkMacSystemFont, 'SF Pro Display'">
+                        </div>
+
+                        <div class="control-group">
                             <div class="text-style-bar" id="element-text-style">
+                                <input type="number" id="element-font-size" min="12" max="300" value="60" title="Font Size">
                                 <input type="color" id="element-font-color" value="#ffffff" title="Text Color">
                                 <select id="element-font-weight" title="Font Weight">
                                     <option value="300">Light</option>

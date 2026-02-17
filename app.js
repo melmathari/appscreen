@@ -212,6 +212,16 @@ function getSelectedElement() {
     return getElements().find(el => el.id === selectedElementId) || null;
 }
 
+function getElementText(el) {
+    if (el.texts) {
+        return el.texts[state.currentLanguage]
+            || el.texts['en']
+            || Object.values(el.texts).find(v => v)
+            || el.text || '';
+    }
+    return el.text || '';
+}
+
 function setElementProperty(id, key, value) {
     const elements = getElements();
     const el = elements.find(e => e.id === id);
@@ -346,6 +356,7 @@ function addTextElement() {
         src: null,
         name: 'Text',
         text: 'Your Text',
+        texts: { [state.currentLanguage]: 'Your Text' },
         font: "-apple-system, BlinkMacSystemFont, 'SF Pro Display'",
         fontSize: 60,
         fontWeight: '600',
@@ -923,7 +934,8 @@ async function fetchAllGoogleFonts() {
 // Font picker state - separate state for each picker
 const fontPickerState = {
     headline: { category: 'popular', search: '' },
-    subheadline: { category: 'popular', search: '' }
+    subheadline: { category: 'popular', search: '' },
+    element: { category: 'popular', search: '' }
 };
 
 // Initialize all font pickers
@@ -948,6 +960,19 @@ function initFontPicker() {
         preview: 'subheadline-font-picker-preview',
         hidden: 'subheadline-font',
         stateKey: 'subheadlineFont'
+    });
+
+    initSingleFontPicker('element', {
+        picker: 'element-font-picker',
+        trigger: 'element-font-picker-trigger',
+        dropdown: 'element-font-picker-dropdown',
+        search: 'element-font-search',
+        list: 'element-font-picker-list',
+        preview: 'element-font-picker-preview',
+        hidden: 'element-font',
+        stateKey: 'font',
+        getFont: () => { const el = getSelectedElement(); return el ? el.font : ''; },
+        setFont: (value) => { if (selectedElementId) setElementProperty(selectedElementId, 'font', value); }
     });
 }
 
@@ -1014,7 +1039,7 @@ async function renderFontList(pickerId, ids) {
 
     const pickerState = fontPickerState[pickerId];
     let fonts = [];
-    const currentFont = getTextSettings()[ids.stateKey];
+    const currentFont = ids.getFont ? ids.getFont() : getTextSettings()[ids.stateKey];
 
     if (pickerState.category === 'system') {
         fonts = googleFonts.system.map(f => ({
@@ -1094,7 +1119,11 @@ async function renderFontList(pickerId, ids) {
 
             // Update state
             document.getElementById(ids.hidden).value = fontValue;
-            setTextValue(ids.stateKey, fontValue);
+            if (ids.setFont) {
+                ids.setFont(fontValue);
+            } else {
+                setTextValue(ids.stateKey, fontValue);
+            }
 
             // Update preview
             const preview = document.getElementById(ids.preview);
@@ -1152,6 +1181,32 @@ function updateSingleFontPickerPreview(hiddenId, previewId, stateKey) {
         if (match) {
             fontName = match[1];
             // Load the font if it's a Google Font
+            loadGoogleFont(fontName);
+        }
+    }
+
+    preview.textContent = fontName;
+    preview.style.fontFamily = fontValue;
+}
+
+function updateElementFontPickerPreview(el) {
+    const preview = document.getElementById('element-font-picker-preview');
+    const hiddenInput = document.getElementById('element-font');
+    if (!preview || !hiddenInput || !el) return;
+
+    const fontValue = el.font;
+    if (!fontValue) return;
+
+    hiddenInput.value = fontValue;
+
+    let fontName = 'SF Pro Display';
+    const systemFont = googleFonts.system.find(f => f.value === fontValue);
+    if (systemFont) {
+        fontName = systemFont.name;
+    } else {
+        const match = fontValue.match(/'([^']+)'/);
+        if (match) {
+            fontName = match[1];
             loadGoogleFont(fontName);
         }
     }
@@ -2252,7 +2307,7 @@ function updateElementsList() {
         item.innerHTML = `
             <div class="element-item-thumb">${thumbContent}</div>
             <div class="element-item-info">
-                <div class="element-item-name">${el.type === 'text' ? (el.text || 'Text') : el.type === 'emoji' ? `${el.emoji} ${el.name}` : el.name}</div>
+                <div class="element-item-name">${el.type === 'text' ? (getElementText(el) || 'Text') : el.type === 'emoji' ? `${el.emoji} ${el.name}` : el.name}</div>
                 <div class="element-item-layer">${layerLabels[el.layer] || el.layer}</div>
             </div>
             <div class="element-item-actions">
@@ -2333,9 +2388,10 @@ function updateElementProperties() {
 
     if (el.type === 'text') {
         textProps.style.display = '';
-        document.getElementById('element-text-input').value = el.text || '';
+        document.getElementById('element-text-input').value = getElementText(el);
+        document.getElementById('element-font').value = el.font;
+        updateElementFontPickerPreview(el);
         document.getElementById('element-font-size').value = el.fontSize;
-        document.getElementById('element-font-size-value').textContent = el.fontSize;
         document.getElementById('element-font-color').value = el.fontColor;
         document.getElementById('element-font-weight').value = el.fontWeight;
         document.getElementById('element-italic-btn').classList.toggle('active', el.italic);
@@ -2547,7 +2603,14 @@ function setupElementEventListeners() {
     const textInput = document.getElementById('element-text-input');
     if (textInput) {
         textInput.addEventListener('input', () => {
-            if (selectedElementId) setElementProperty(selectedElementId, 'text', textInput.value);
+            if (!selectedElementId) return;
+            const el = getSelectedElement();
+            if (!el) return;
+            if (!el.texts) el.texts = {};
+            el.texts[state.currentLanguage] = textInput.value;
+            el.text = textInput.value; // sync for backwards compat
+            updateCanvas();
+            updateElementsList();
         });
     }
 
@@ -3786,6 +3849,10 @@ function setupEventListeners() {
         openTranslateModal('subheadline');
     });
 
+    document.getElementById('translate-element-btn').addEventListener('click', () => {
+        openTranslateModal('element');
+    });
+
     document.getElementById('translate-source-lang').addEventListener('change', (e) => {
         updateTranslateSourcePreview();
     });
@@ -4813,11 +4880,21 @@ function openTranslateModal(target) {
     currentTranslateTarget = target;
     const text = getTextSettings();
     const isHeadline = target === 'headline';
+    const isElement = target === 'element';
 
-    document.getElementById('translate-target-type').textContent = isHeadline ? 'Headline' : 'Subheadline';
-
-    const languages = isHeadline ? text.headlineLanguages : text.subheadlineLanguages;
-    const texts = isHeadline ? text.headlines : text.subheadlines;
+    let languages, texts;
+    if (isElement) {
+        const el = getSelectedElement();
+        if (!el || el.type !== 'text') return;
+        document.getElementById('translate-target-type').textContent = 'Element Text';
+        languages = state.projectLanguages;
+        if (!el.texts) el.texts = {};
+        texts = el.texts;
+    } else {
+        document.getElementById('translate-target-type').textContent = isHeadline ? 'Headline' : 'Subheadline';
+        languages = isHeadline ? text.headlineLanguages : text.subheadlineLanguages;
+        texts = isHeadline ? text.headlines : text.subheadlines;
+    }
 
     // Populate source language dropdown (first language selected by default)
     const sourceSelect = document.getElementById('translate-source-lang');
@@ -4855,36 +4932,55 @@ function openTranslateModal(target) {
 }
 
 function updateTranslateSourcePreview() {
-    const text = getTextSettings();
     const sourceLang = document.getElementById('translate-source-lang').value;
-    const isHeadline = currentTranslateTarget === 'headline';
-    const texts = isHeadline ? text.headlines : text.subheadlines;
-    const sourceText = texts[sourceLang] || '';
+    let sourceText;
+    if (currentTranslateTarget === 'element') {
+        const el = getSelectedElement();
+        sourceText = el && el.texts ? (el.texts[sourceLang] || '') : '';
+    } else {
+        const text = getTextSettings();
+        const isHeadline = currentTranslateTarget === 'headline';
+        const texts = isHeadline ? text.headlines : text.subheadlines;
+        sourceText = texts[sourceLang] || '';
+    }
 
     document.getElementById('source-text-preview').textContent = sourceText || 'No text entered';
 }
 
 function applyTranslations() {
-    const text = getTextSettings();
-    const isHeadline = currentTranslateTarget === 'headline';
-    const texts = isHeadline ? text.headlines : text.subheadlines;
+    const isElement = currentTranslateTarget === 'element';
 
-    // Get all translations from the modal
-    document.querySelectorAll('#translate-targets .translate-target-item').forEach(item => {
-        const lang = item.dataset.lang;
-        const textarea = item.querySelector('textarea');
-        texts[lang] = textarea.value;
-    });
+    if (isElement) {
+        const el = getSelectedElement();
+        if (!el) return;
+        if (!el.texts) el.texts = {};
 
-    // Update the current text field
-    const currentLang = isHeadline ? text.currentHeadlineLang : text.currentSubheadlineLang;
-    if (isHeadline) {
-        document.getElementById('headline-text').value = texts[currentLang] || '';
+        document.querySelectorAll('#translate-targets .translate-target-item').forEach(item => {
+            const lang = item.dataset.lang;
+            const textarea = item.querySelector('textarea');
+            el.texts[lang] = textarea.value;
+        });
+        el.text = getElementText(el); // sync for backwards compat
+        document.getElementById('element-text-input').value = getElementText(el);
     } else {
-        document.getElementById('subheadline-text').value = texts[currentLang] || '';
-        // Enable subheadline display when translations are applied
-        text.subheadlineEnabled = true;
-        syncUIWithState();
+        const text = getTextSettings();
+        const isHeadline = currentTranslateTarget === 'headline';
+        const texts = isHeadline ? text.headlines : text.subheadlines;
+
+        document.querySelectorAll('#translate-targets .translate-target-item').forEach(item => {
+            const lang = item.dataset.lang;
+            const textarea = item.querySelector('textarea');
+            texts[lang] = textarea.value;
+        });
+
+        const currentLang = isHeadline ? text.currentHeadlineLang : text.currentSubheadlineLang;
+        if (isHeadline) {
+            document.getElementById('headline-text').value = texts[currentLang] || '';
+        } else {
+            document.getElementById('subheadline-text').value = texts[currentLang] || '';
+            text.subheadlineEnabled = true;
+            syncUIWithState();
+        }
     }
 
     saveState();
@@ -4892,12 +4988,22 @@ function applyTranslations() {
 }
 
 async function aiTranslateAll() {
-    const text = getTextSettings();
     const sourceLang = document.getElementById('translate-source-lang').value;
-    const isHeadline = currentTranslateTarget === 'headline';
-    const texts = isHeadline ? text.headlines : text.subheadlines;
-    const languages = isHeadline ? text.headlineLanguages : text.subheadlineLanguages;
-    const sourceText = texts[sourceLang] || '';
+    const isElement = currentTranslateTarget === 'element';
+    let texts, languages, sourceText;
+    if (isElement) {
+        const el = getSelectedElement();
+        if (!el) return;
+        texts = el.texts || {};
+        languages = state.projectLanguages;
+        sourceText = texts[sourceLang] || '';
+    } else {
+        const text = getTextSettings();
+        const isHeadline = currentTranslateTarget === 'headline';
+        texts = isHeadline ? text.headlines : text.subheadlines;
+        languages = isHeadline ? text.headlineLanguages : text.subheadlineLanguages;
+        sourceText = texts[sourceLang] || '';
+    }
 
     if (!sourceText.trim()) {
         setTranslateStatus('Please enter text in the source language first', 'error');
@@ -7227,7 +7333,9 @@ function drawElementsToContext(context, dims, elements, layer) {
             const aspect = el.image.height / el.image.width;
             const elHeight = elWidth * aspect;
             context.drawImage(el.image, -elWidth / 2, -elHeight / 2, elWidth, elHeight);
-        } else if (el.type === 'text' && el.text) {
+        } else if (el.type === 'text') {
+            const elText = getElementText(el);
+            if (!elText) { context.restore(); return; }
             const fontStyle = el.italic ? 'italic' : 'normal';
             context.font = `${fontStyle} ${el.fontWeight} ${el.fontSize}px ${el.font}`;
             context.fillStyle = el.fontColor;
@@ -7235,7 +7343,7 @@ function drawElementsToContext(context, dims, elements, layer) {
             context.textBaseline = 'middle';
 
             // Word-wrap text within element width (respects manual line breaks)
-            const lines = wrapText(context, el.text, elWidth);
+            const lines = wrapText(context, elText, elWidth);
             const lineHeight = el.fontSize * 1.05;
             const totalHeight = (lines.length - 1) * lineHeight + el.fontSize;
 
@@ -7348,7 +7456,7 @@ function drawElementFrame(context, el, dims, textWidth, textHeight) {
     const padding = el.fontSize * 0.4 * scale;
     // Measure the widest line (using wrapText to match rendering)
     const elWidth = dims.width * (el.width / 100);
-    const lines = wrapText(context, el.text, elWidth);
+    const lines = wrapText(context, getElementText(el), elWidth);
     const maxLineW = Math.max(...lines.map(l => context.measureText(l).width));
     const frameW = maxLineW + padding * 2;
     const frameH = textHeight + padding * 2;
