@@ -7083,8 +7083,11 @@ function drawScreenshotToContext(context, dims, img, settings) {
         imgWidth = (img.width / img.height) * imgHeight;
     }
 
-    const x = (dims.width - imgWidth) * (settings.x / 100);
-    const y = (dims.height - imgHeight) * (settings.y / 100);
+    // Ensure minimum movement range so position works even at 100% scale
+    const moveX = Math.max(dims.width - imgWidth, dims.width * 0.15);
+    const moveY = Math.max(dims.height - imgHeight, dims.height * 0.15);
+    const x = (dims.width - imgWidth) / 2 + (settings.x / 100 - 0.5) * moveX;
+    const y = (dims.height - imgHeight) / 2 + (settings.y / 100 - 0.5) * moveY;
     const centerX = x + imgWidth / 2;
     const centerY = y + imgHeight / 2;
 
@@ -7668,8 +7671,11 @@ function drawScreenshot() {
         imgWidth = (img.width / img.height) * imgHeight;
     }
 
-    const x = (dims.width - imgWidth) * (settings.x / 100);
-    const y = (dims.height - imgHeight) * (settings.y / 100);
+    // Ensure minimum movement range so position works even at 100% scale
+    const moveX = Math.max(dims.width - imgWidth, dims.width * 0.15);
+    const moveY = Math.max(dims.height - imgHeight, dims.height * 0.15);
+    const x = (dims.width - imgWidth) / 2 + (settings.x / 100 - 0.5) * moveX;
+    const y = (dims.height - imgHeight) / 2 + (settings.y / 100 - 0.5) * moveY;
 
     // Center point for transformations
     const centerX = x + imgWidth / 2;
