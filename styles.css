@@ -572,6 +572,32 @@ html.tauri-app .right-sidebar {
     text-align: right;
 }
 
+.slider-reset-btn {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.control-row:hover .slider-reset-btn {
+    opacity: 0.5;
+}
+
+.slider-reset-btn:hover {
+    opacity: 1 !important;
+    color: var(--accent);
+}
+
 input[type="text"],
 input[type="number"],
 select,
