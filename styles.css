@@ -1757,6 +1757,30 @@ input[type="range"]::-webkit-slider-thumb {
     box-shadow: 0 0 0 1px var(--accent);
 }
 
+/* Frame color swatches */
+.frame-color-swatches {
+    display: flex;
+    gap: 6px;
+}
+
+.frame-color-swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.15s;
+}
+
+.frame-color-swatch:hover {
+    transform: scale(1.1);
+}
+
+.frame-color-swatch.active {
+    border-color: #fff;
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
 /* Tabs */
 .tabs {
     display: flex;

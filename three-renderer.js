@@ -49,6 +49,92 @@ const deviceConfigs = {
     }
 };
 
+// Frame color presets per device (real device colors)
+// Using var so it's accessible from app.js
+var frameColorPresets = {
+    iphone: [
+        { id: 'natural', label: 'Natural Titanium', swatch: '#9d927f',
+          materials: { backpanel: '#9d927f', metalframe: '#5f5950', gray: '#221f1b' } },
+        { id: 'blue', label: 'Blue Titanium', swatch: '#3d4d5c',
+          materials: { backpanel: '#394d5f', metalframe: '#3a4553', gray: '#1a1f24' } },
+        { id: 'white', label: 'White Titanium', swatch: '#e3ddd4',
+          materials: { backpanel: '#e3ddd4', metalframe: '#c4bdb4', gray: '#2a2825' } },
+        { id: 'black', label: 'Black Titanium', swatch: '#3a3632',
+          materials: { backpanel: '#3a3632', metalframe: '#2a2725', gray: '#1a1918' } },
+        { id: 'desert', label: 'Desert Titanium', swatch: '#c4a882',
+          materials: { backpanel: '#c4a882', metalframe: '#8a7560', gray: '#2a2218' } },
+        { id: 'deep-purple', label: 'Deep Purple', swatch: '#5b4a6e',
+          materials: { backpanel: '#5b4a6e', metalframe: '#3d3348', gray: '#1e1825' } },
+        { id: 'gold', label: 'Gold', swatch: '#e3c8a0',
+          materials: { backpanel: '#e3c8a0', metalframe: '#c9a96e', gray: '#2a2418' } },
+        { id: 'red', label: 'Product Red', swatch: '#c1272d',
+          materials: { backpanel: '#c1272d', metalframe: '#8a1c20', gray: '#1a0a0a' } },
+    ],
+    samsung: [
+        { id: 'gray', label: 'Titanium Gray', swatch: '#8a8a8a',
+          materials: { back_glass: '#4c4c4c', frame: '#cdcdcd', antenna: '#707070' } },
+        { id: 'black', label: 'Titanium Black', swatch: '#2a2a2a',
+          materials: { back_glass: '#1a1a1a', frame: '#3a3a3a', antenna: '#2a2a2a' } },
+        { id: 'silverblue', label: 'Titanium Silverblue', swatch: '#a8b8c8',
+          materials: { back_glass: '#8a9eb0', frame: '#b8c8d4', antenna: '#7a8ea0' } },
+        { id: 'whitesilver', label: 'Titanium Whitesilver', swatch: '#e8e4df',
+          materials: { back_glass: '#d8d4cf', frame: '#e8e4df', antenna: '#c0bcb7' } },
+        { id: 'pinkgold', label: 'Titanium Pinkgold', swatch: '#d4a89a',
+          materials: { back_glass: '#c89888', frame: '#d4b0a0', antenna: '#b08878' } },
+        { id: 'jadegreen', label: 'Titanium Jadegreen', swatch: '#9aaa9c',
+          materials: { back_glass: '#7a9a7c', frame: '#a8b8aa', antenna: '#6a8a6c' } },
+        { id: 'jetblack', label: 'Titanium Jetblack', swatch: '#404040',
+          materials: { back_glass: '#2a2a2a', frame: '#484848', antenna: '#353535' } },
+    ]
+};
+
+// Store original material colors for the current model
+let originalMaterialColors = {};
+
+// Apply a frame color preset to the phone model
+function setPhoneFrameColor(presetId, deviceType) {
+    if (!phoneModel) return;
+
+    deviceType = deviceType || currentDeviceModel;
+    const presets = frameColorPresets[deviceType];
+    if (!presets) return;
+
+    const preset = presets.find(p => p.id === presetId);
+    if (!preset) return;
+
+    phoneModel.traverse((child) => {
+        if (child.isMesh && child.material) {
+            const matName = (child.material.name || '').toLowerCase();
+            if (preset.materials[matName]) {
+                child.material.color.set(preset.materials[matName]);
+            }
+        }
+    });
+
+    requestThreeJSRender();
+}
+
+// Apply frame color to a cached model (for side previews)
+function setCachedModelFrameColor(presetId, deviceType) {
+    const cached = phoneModelCache[deviceType];
+    if (!cached?.loaded) return;
+
+    const presets = frameColorPresets[deviceType];
+    if (!presets) return;
+
+    const preset = presets.find(p => p.id === presetId);
+    if (!preset) return;
+
+    cached.model.traverse((child) => {
+        if (child.isMesh && child.material) {
+            const matName = (child.material.name || '').toLowerCase();
+            if (preset.materials[matName]) {
+                child.material.color.set(preset.materials[matName]);
+            }
+        }
+    });
+}
+
 // Initialize Three.js scene
 function initThreeJS() {
     if (isThreeJSInitialized) return;
@@ -232,6 +318,11 @@ function loadPhoneModel() {
                 const rotation3D = ss?.rotation3D || { x: 0, y: 0, z: 0 };
                 setThreeJSRotation(rotation3D.x, rotation3D.y, rotation3D.z);
 
+                // Apply frame color
+                if (ss?.frameColor) {
+                    setPhoneFrameColor(ss.frameColor, currentDeviceModel);
+                }
+
                 // Apply screenshot texture
                 if (state.screenshots.length > 0) {
                     updateScreenTexture();
@@ -342,6 +433,11 @@ function switchPhoneModel(deviceType) {
                 const ss = typeof getScreenshotSettings === 'function' ? getScreenshotSettings() : state.defaults?.screenshot;
                 const rotation3D = ss?.rotation3D || { x: 0, y: 0, z: 0 };
                 setThreeJSRotation(rotation3D.x, rotation3D.y, rotation3D.z);
+
+                // Apply frame color
+                if (ss?.frameColor) {
+                    setPhoneFrameColor(ss.frameColor, currentDeviceModel);
+                }
 
                 if (state.screenshots.length > 0) {
                     updateScreenTexture();
@@ -789,6 +885,15 @@ function renderThreeJSForScreenshot(targetCanvas, width, height, screenshotIndex
         screenPlaneToUse.material = newMaterial;
     }
 
+    // Apply frame color for this screenshot
+    if (ss.frameColor) {
+        if (useCurrentModel) {
+            setPhoneFrameColor(ss.frameColor, screenshotDeviceType);
+        } else {
+            setCachedModelFrameColor(ss.frameColor, screenshotDeviceType);
+        }
+    }
+
     // Apply rotation for this screenshot + model base rotation
     const rotation3D = ss.rotation3D || { x: 0, y: 0, z: 0 };
     const modelRot = config.modelRotation || { x: 0, y: 0, z: 0 };
@@ -848,6 +953,14 @@ function renderThreeJSForScreenshot(targetCanvas, width, height, screenshotIndex
             screenPlaneToUse.material.dispose();
         }
         screenPlaneToUse.material = oldMaterial;
+    }
+
+    // Restore frame color on current model if we changed it
+    if (useCurrentModel && ss.frameColor && typeof state !== 'undefined') {
+        const currentSS = typeof getScreenshotSettings === 'function' ? getScreenshotSettings() : null;
+        if (currentSS?.frameColor) {
+            setPhoneFrameColor(currentSS.frameColor, currentDeviceModel);
+        }
     }
 
     // Clean up: remove cached model from scene and restore current model visibility

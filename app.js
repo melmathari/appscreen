@@ -2087,6 +2087,44 @@ function duplicateScreenshot(index) {
     updateCanvas();
 }
 
+// Populate frame color swatches for the given device and highlight the active one
+function updateFrameColorSwatches(deviceType, activeColorId) {
+    const container = document.getElementById('frame-color-swatches');
+    if (!container) return;
+
+    const presets = typeof frameColorPresets !== 'undefined' ? frameColorPresets[deviceType] : null;
+    if (!presets) {
+        container.innerHTML = '';
+        return;
+    }
+
+    // Default to first preset if none specified
+    if (!activeColorId) activeColorId = presets[0].id;
+
+    container.innerHTML = presets.map(p =>
+        `<div class="frame-color-swatch${p.id === activeColorId ? ' active' : ''}" ` +
+        `data-color-id="${p.id}" title="${p.label}" ` +
+        `style="background: ${p.swatch}"></div>`
+    ).join('');
+
+    // Attach click handlers
+    container.querySelectorAll('.frame-color-swatch').forEach(swatch => {
+        swatch.addEventListener('click', () => {
+            const colorId = swatch.dataset.colorId;
+            container.querySelectorAll('.frame-color-swatch').forEach(s => s.classList.remove('active'));
+            swatch.classList.add('active');
+
+            setScreenshotSetting('frameColor', colorId);
+
+            if (typeof setPhoneFrameColor === 'function') {
+                setPhoneFrameColor(colorId, deviceType);
+            }
+
+            updateCanvas();
+        });
+    });
+}
+
 // Sync UI controls with current state
 function syncUIWithState() {
     // Update language button
@@ -2249,6 +2287,7 @@ function syncUIWithState() {
     document.querySelectorAll('#device-3d-selector button').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.model === device3D);
     });
+    updateFrameColorSwatches(device3D, ss.frameColor);
     document.getElementById('rotation-3d-options').style.display = use3D ? 'block' : 'none';
     document.getElementById('rotation-3d-x').value = rotation3D.x;
     document.getElementById('rotation-3d-x-value').textContent = formatValue(rotation3D.x) + '°';
@@ -2260,6 +2299,7 @@ function syncUIWithState() {
     // Hide 2D-only settings in 3D mode, show 3D tip
     document.getElementById('2d-only-settings').style.display = use3D ? 'none' : 'block';
     document.getElementById('position-presets-section').style.display = use3D ? 'none' : 'block';
+    document.getElementById('frame-color-section').style.display = use3D ? 'block' : 'none';
     document.getElementById('3d-tip').style.display = use3D ? 'flex' : 'none';
 
     // Show/hide 3D renderer and switch model if needed
@@ -4531,6 +4571,7 @@ function setupEventListeners() {
             // Hide 2D-only settings in 3D mode, show 3D tip
             document.getElementById('2d-only-settings').style.display = use3D ? 'none' : 'block';
             document.getElementById('position-presets-section').style.display = use3D ? 'none' : 'block';
+            document.getElementById('frame-color-section').style.display = use3D ? 'block' : 'none';
             document.getElementById('3d-tip').style.display = use3D ? 'flex' : 'none';
 
             if (typeof showThreeJS === 'function') {
@@ -4554,8 +4595,19 @@ function setupEventListeners() {
             const device3D = btn.dataset.model;
             setScreenshotSetting('device3D', device3D);
 
+            // Reset frame color to first preset for new device
+            const presets = typeof frameColorPresets !== 'undefined' ? frameColorPresets[device3D] : null;
+            const defaultColor = presets ? presets[0].id : null;
+            setScreenshotSetting('frameColor', defaultColor);
+            updateFrameColorSwatches(device3D, defaultColor);
+
             if (typeof switchPhoneModel === 'function') {
                 switchPhoneModel(device3D);
+            }
+
+            // Apply default frame color after model switch
+            if (defaultColor && typeof setPhoneFrameColor === 'function') {
+                setTimeout(() => setPhoneFrameColor(defaultColor, device3D), 100);
             }
 
             updateCanvas();
